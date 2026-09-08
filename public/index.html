@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Physics AI</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="box">
+
+        <h1>⚛️ Physics AI</h1>
+
+        <p>
+            مدرس الفيزياء الذكي
+        </p>
+
+        <h2>
+            📚 اختر الصف
+        </h2>
+
+        <select id="grade">
+
+            <option value="">
+                اختر الصف
+            </option>
+
+            <option value="third">
+                الصف الثالث الثانوي العام
+            </option>
+
+            <option value="second-bac">
+                الصف الثاني بكالوريا
+            </option>
+
+        </select>
+
+        <button id="startButton">
+            ابدأ الدراسة
+        </button>
+
+        <div id="message"></div>
+
+    </div>
+
+
+    <script>
+
+        const grade =
+            document.getElementById("grade");
+
+        const startButton =
+            document.getElementById("startButton");
+
+        const message =
+            document.getElementById("message");
+
+
+        startButton.addEventListener(
+            "click",
+            function () {
+
+                if (!grade.value) {
+
+                    message.textContent =
+                        "⚠️ اختر الصف أولًا.";
+
+                    message.style.color =
+                        "#d33";
+
+                    return;
+                }
+
+
+                if (grade.value === "third") {
+
+                    message.textContent =
+                        "✅ تم اختيار الصف الثالث الثانوي العام.";
+
+                }
+
+
+                if (grade.value === "second-bac") {
+
+                    message.textContent =
+                        "✅ تم اختيار الصف الثاني بكالوريا.";
+
+                }
+
+
+                message.style.color =
+                    "#198754";
+
+
+                // بعد ثانية ننتقل للواجهة الرئيسية
+
+                setTimeout(function () {
+
+                    window.location.href =
+                        "/study.html";
+
+                }, 700);
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>

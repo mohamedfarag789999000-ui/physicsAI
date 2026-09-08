@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Physics AI | اختيار الدرس
+    </title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+
+<body>
+
+<header class="topbar">
+
+    <div class="brand">
+
+        <div class="logo">
+            ⚛️
+        </div>
+
+        <div>
+
+            <h1>
+                Physics AI
+            </h1>
+
+            <span>
+                مدرس الفيزياء الذكي
+            </span>
+
+        </div>
+
+    </div>
+
+
+    <div class="creator">
+
+        <span>
+            تطوير
+        </span>
+
+        <strong>
+            محمد عبده فرج
+        </strong>
+
+    </div>
+
+</header>
+
+
+<main class="app">
+
+<section class="curriculum">
+
+    <div class="section-title">
+
+        <h2>
+            📚 اختر موضوع الدراسة
+        </h2>
+
+        <p>
+            اختار الصف والوحدة والدرس وابدأ التعلم مع Physics AI
+        </p>
+
+    </div>
+
+
+    <!-- الصف -->
+
+    <div class="select-box">
+
+        <label for="grade">
+            الصف الدراسي
+        </label>
+
+        <select id="grade">
+
+            <option value="">
+                اختر الصف
+            </option>
+
+           <option value="secondBaccalaureate">
+    الصف الثاني بكالوريا
+</option>
+
+            <option value="thirdSecondary">
+                الصف الثالث الثانوي
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <br>
+
+
+    <!-- الوحدة -->
+
+    <div class="select-box">
+
+        <label for="unit">
+            الوحدة / المجال
+        </label>
+
+        <select id="unit">
+
+            <option value="">
+                اختر الوحدة
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <br>
+
+
+    <!-- الدرس -->
+
+    <div class="select-box">
+
+        <label for="lesson">
+            الدرس
+        </label>
+
+        <select id="lesson">
+
+            <option value="">
+                اختر الدرس
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <!-- معلومات الدرس -->
+
+    <div
+        class="lesson-info"
+        id="lessonInfo"
+    >
+
+        <div class="lesson-icon">
+            📖
+        </div>
+
+
+        <div>
+
+            <h3 id="lessonTitle">
+                اختر درسًا للبدء
+            </h3>
+
+            <p id="lessonDescription">
+                اختر الصف والوحدة والدرس لعرض معلومات الدرس.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <!-- زر البداية -->
+
+    <button
+        id="startChatButton"
+        class="start-button"
+    >
+
+        ابدأ الدراسة ⚛️
+
+    </button>
+
+
+    <div
+        id="statusMessage"
+        class="status-message"
+    ></div>
+
+</section>
+
+
+<!-- موسوعة الفيزياء -->
+
+<section class="curriculum">
+
+    <div class="section-title">
+
+        <h2>
+            🌌 موسوعة الفيزياء
+        </h2>
+
+        <p>
+            اتعلم الفيزياء من الأساسيات لحد الموضوعات المتقدمة.
+        </p>
+
+    </div>
+
+
+    <div class="select-box">
+
+        <label for="encyclopediaCategory">
+            اختر المجال
+        </label>
+
+        <select id="encyclopediaCategory">
+
+            <option value="">
+                اختر مجالًا
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <br>
+
+
+    <div class="select-box">
+
+        <label for="encyclopediaLesson">
+            اختر الموضوع
+        </label>
+
+        <select id="encyclopediaLesson">
+
+            <option value="">
+                اختر الموضوع
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <div
+        class="lesson-info"
+        id="encyclopediaInfo"
+    >
+
+        <div class="lesson-icon">
+            🌌
+        </div>
+
+        <div>
+
+            <h3 id="encyclopediaTitle">
+                اختر موضوعًا
+            </h3>
+
+            <p id="encyclopediaDescription">
+                اختار مجال وموضوع من موسوعة الفيزياء.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <button
+        id="startEncyclopediaButton"
+        class="start-button"
+    >
+
+        ابدأ التعلم من الموسوعة 🌌
+
+    </button>
+
+
+    <div
+        id="encyclopediaStatus"
+        class="status-message"
+    ></div>
+
+</section>
+
+</main>
+
+
+<!-- ملف بيانات المنهج -->
+
+<script src="curriculum.js"></script>
+
+
+<script>
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+
+
+        /*
+        ========================================
+        عناصر المنهج الدراسي
+        ========================================
+        */
+
+        const gradeSelect =
+            document.getElementById("grade");
+
+        const unitSelect =
+            document.getElementById("unit");
+
+        const lessonSelect =
+            document.getElementById("lesson");
+
+        const lessonTitle =
+            document.getElementById("lessonTitle");
+
+        const lessonDescription =
+            document.getElementById("lessonDescription");
+
+        const startChatButton =
+            document.getElementById("startChatButton");
+
+        const statusMessage =
+            document.getElementById("statusMessage");
+
+
+        /*
+        ========================================
+        تغيير الصف
+        ========================================
+        */
+
+        gradeSelect.addEventListener(
+            "change",
+            function () {
+
+                const grade =
+                    gradeSelect.value;
+
+
+                unitSelect.innerHTML =
+                    `
+                    <option value="">
+                        اختر الوحدة
+                    </option>
+                    `;
+
+
+                lessonSelect.innerHTML =
+                    `
+                    <option value="">
+                        اختر الدرس
+                    </option>
+                    `;
+
+
+                lessonTitle.textContent =
+                    "اختر درسًا للبدء";
+
+
+                lessonDescription.textContent =
+                    "اختر الوحدة والدرس لعرض معلوماته.";
+
+
+                statusMessage.textContent =
+                    "";
+
+
+                if (!grade) {
+                    return;
+                }
+
+
+                const gradeData =
+                    PHYSICS_CURRICULUM
+                        .egypt
+                        .grades[grade];
+
+
+                if (!gradeData) {
+                    return;
+                }
+
+
+                gradeData.units.forEach(
+                    function (unit, index) {
+
+                        const option =
+                            document.createElement("option");
+
+
+                        option.value =
+                            index;
+
+
+                        option.textContent =
+                            unit.title;
+
+
+                        unitSelect.appendChild(
+                            option
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+
+        /*
+        ========================================
+        تغيير الوحدة
+        ========================================
+        */
+
+        unitSelect.addEventListener(
+            "change",
+            function () {
+
+                const grade =
+                    gradeSelect.value;
+
+
+                const unitIndex =
+                    unitSelect.value;
+
+
+                lessonSelect.innerHTML =
+                    `
+                    <option value="">
+                        اختر الدرس
+                    </option>
+                    `;
+
+
+                lessonTitle.textContent =
+                    "اختر درسًا للبدء";
+
+
+                lessonDescription.textContent =
+                    "اختر الدرس لعرض معلوماته.";
+
+
+                statusMessage.textContent =
+                    "";
+
+
+                if (
+                    !grade ||
+                    unitIndex === ""
+                ) {
+                    return;
+                }
+
+
+                const gradeData =
+                    PHYSICS_CURRICULUM
+                        .egypt
+                        .grades[grade];
+
+
+                const unit =
+                    gradeData.units[
+                        Number(unitIndex)
+                    ];
+
+
+                if (!unit) {
+                    return;
+                }
+
+
+                unit.lessons.forEach(
+                    function (lesson, index) {
+
+                        const option =
+                            document.createElement("option");
+
+
+                        option.value =
+                            index;
+
+
+                        option.textContent =
+                            lesson.title;
+
+
+                        lessonSelect.appendChild(
+                            option
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+
+        /*
+        ========================================
+        تغيير الدرس
+        ========================================
+        */
+
+        lessonSelect.addEventListener(
+            "change",
+            function () {
+
+                const grade =
+                    gradeSelect.value;
+
+
+                const unitIndex =
+                    unitSelect.value;
+
+
+                const lessonIndex =
+                    lessonSelect.value;
+
+
+                if (
+                    !grade ||
+                    unitIndex === "" ||
+                    lessonIndex === ""
+                ) {
+                    return;
+                }
+
+
+                const gradeData =
+                    PHYSICS_CURRICULUM
+                        .egypt
+                        .grades[grade];
+
+
+                const unit =
+                    gradeData.units[
+                        Number(unitIndex)
+                    ];
+
+
+                if (!unit) {
+                    return;
+                }
+
+
+                const lesson =
+                    unit.lessons[
+                        Number(lessonIndex)
+                    ];
+
+
+                if (!lesson) {
+                    return;
+                }
+
+
+                lessonTitle.textContent =
+                    lesson.title;
+
+
+                lessonDescription.textContent =
+                    lesson.description;
+
+
+                statusMessage.textContent =
+                    "";
+
+            }
+        );
+
+
+        /*
+        ========================================
+        بدء محادثة المنهج
+        ========================================
+        */
+
+        startChatButton.addEventListener(
+            "click",
+            function () {
+
+                const grade =
+                    gradeSelect.value;
+
+
+                const unitIndex =
+                    unitSelect.value;
+
+
+                const lessonIndex =
+                    lessonSelect.value;
+
+
+                if (!grade) {
+
+                    statusMessage.textContent =
+                        "⚠️ اختار الصف الأول.";
+
+                    return;
+                }
+
+
+                if (unitIndex === "") {
+
+                    statusMessage.textContent =
+                        "⚠️ اختار الوحدة الأول.";
+
+                    return;
+                }
+
+
+                if (lessonIndex === "") {
+
+                    statusMessage.textContent =
+                        "⚠️ اختار الدرس الأول.";
+
+                    return;
+                }
+
+
+                const gradeData =
+                    PHYSICS_CURRICULUM
+                        .egypt
+                        .grades[grade];
+
+
+                const unit =
+                    gradeData.units[
+                        Number(unitIndex)
+                    ];
+
+
+                const lesson =
+                    unit.lessons[
+                        Number(lessonIndex)
+                    ];
+
+
+                const params =
+                    new URLSearchParams();
+
+
+                params.set(
+                    "mode",
+                    "curriculum"
+                );
+
+
+                params.set(
+                    "grade",
+                    gradeData.name
+                );
+
+
+                params.set(
+                    "subject",
+                    gradeData.subject
+                );
+
+
+                params.set(
+                    "unit",
+                    unit.title
+                );
+
+
+                params.set(
+                    "lesson",
+                    lesson.title
+                );
+
+
+                params.set(
+                    "description",
+                    lesson.description
+                );
+
+
+                window.location.href =
+                    "/chat.html?" +
+                    params.toString();
+
+            }
+        );
+
+
+        /*
+        ========================================
+        موسوعة الفيزياء
+        ========================================
+        */
+
+        const categorySelect =
+            document.getElementById(
+                "encyclopediaCategory"
+            );
+
+
+        const encyclopediaLessonSelect =
+            document.getElementById(
+                "encyclopediaLesson"
+            );
+
+
+        const encyclopediaTitle =
+            document.getElementById(
+                "encyclopediaTitle"
+            );
+
+
+        const encyclopediaDescription =
+            document.getElementById(
+                "encyclopediaDescription"
+            );
+
+
+        const encyclopediaButton =
+            document.getElementById(
+                "startEncyclopediaButton"
+            );
+
+
+        const encyclopediaStatus =
+            document.getElementById(
+                "encyclopediaStatus"
+            );
+
+
+        /*
+        إضافة المجالات
+        */
+
+        PHYSICS_CURRICULUM
+            .encyclopedia
+            .categories
+            .forEach(
+                function (category, index) {
+
+                    const option =
+                        document.createElement("option");
+
+
+                    option.value =
+                        index;
+
+
+                    option.textContent =
+                        category.title;
+
+
+                    categorySelect.appendChild(
+                        option
+                    );
+
+                }
+            );
+
+
+        /*
+        تغيير المجال
+        */
+
+        categorySelect.addEventListener(
+            "change",
+            function () {
+
+                const categoryIndex =
+                    categorySelect.value;
+
+
+                encyclopediaLessonSelect.innerHTML =
+                    `
+                    <option value="">
+                        اختر الموضوع
+                    </option>
+                    `;
+
+
+                encyclopediaTitle.textContent =
+                    "اختر موضوعًا";
+
+
+                encyclopediaDescription.textContent =
+                    "اختار موضوعًا من المجال.";
+
+
+                encyclopediaStatus.textContent =
+                    "";
+
+
+                if (categoryIndex === "") {
+                    return;
+                }
+
+
+                const category =
+                    PHYSICS_CURRICULUM
+                        .encyclopedia
+                        .categories[
+                            Number(categoryIndex)
+                        ];
+
+
+                if (!category) {
+                    return;
+                }
+
+
+                category.lessons.forEach(
+                    function (lesson, index) {
+
+                        const option =
+                            document.createElement("option");
+
+
+                        option.value =
+                            index;
+
+
+                        option.textContent =
+                            lesson;
+
+
+                        encyclopediaLessonSelect
+                            .appendChild(option);
+
+                    }
+                );
+
+            }
+        );
+
+
+        /*
+        تغيير موضوع الموسوعة
+        */
+
+        encyclopediaLessonSelect.addEventListener(
+            "change",
+            function () {
+
+                const categoryIndex =
+                    categorySelect.value;
+
+
+                const lessonIndex =
+                    encyclopediaLessonSelect.value;
+
+
+                if (
+                    categoryIndex === "" ||
+                    lessonIndex === ""
+                ) {
+                    return;
+                }
+
+
+                const category =
+                    PHYSICS_CURRICULUM
+                        .encyclopedia
+                        .categories[
+                            Number(categoryIndex)
+                        ];
+
+
+                const lesson =
+                    category.lessons[
+                        Number(lessonIndex)
+                    ];
+
+
+                encyclopediaTitle.textContent =
+                    lesson;
+
+
+                encyclopediaDescription.textContent =
+                    "Physics AI هيشرحلك الموضوع من البداية وبطريقة بسيطة.";
+
+            }
+        );
+
+
+        /*
+        بدء موسوعة الفيزياء
+        */
+
+        encyclopediaButton.addEventListener(
+            "click",
+            function () {
+
+                const categoryIndex =
+                    categorySelect.value;
+
+
+                const lessonIndex =
+                    encyclopediaLessonSelect.value;
+
+
+                if (categoryIndex === "") {
+
+                    encyclopediaStatus.textContent =
+                        "⚠️ اختار المجال الأول.";
+
+                    return;
+                }
+
+
+                if (lessonIndex === "") {
+
+                    encyclopediaStatus.textContent =
+                        "⚠️ اختار الموضوع الأول.";
+
+                    return;
+                }
+
+
+                const category =
+                    PHYSICS_CURRICULUM
+                        .encyclopedia
+                        .categories[
+                            Number(categoryIndex)
+                        ];
+
+
+                const lesson =
+                    category.lessons[
+                        Number(lessonIndex)
+                    ];
+
+
+                const params =
+                    new URLSearchParams();
+
+
+                params.set(
+                    "mode",
+                    "encyclopedia"
+                );
+
+
+                params.set(
+                    "grade",
+                    "موسوعة الفيزياء"
+                );
+
+
+                params.set(
+                    "subject",
+                    "الفيزياء"
+                );
+
+
+                params.set(
+                    "unit",
+                    category.title
+                );
+
+
+                params.set(
+                    "lesson",
+                    lesson
+                );
+
+
+                params.set(
+                    "description",
+                    "موضوع من موسوعة الفيزياء"
+                );
+
+
+                window.location.href =
+                    "/chat.html?" +
+                    params.toString();
+
+            }
+        );
+
+    }
+);
+
+</script>
+
+</body>
+
+</html>

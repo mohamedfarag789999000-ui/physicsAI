@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Physics AI | تسجيل الدخول
+    </title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+
+        .auth-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 25px;
+        }
+
+        .auth-card {
+            width: min(450px, 100%);
+            background: white;
+            border: 1px solid #e5e9f0;
+            border-radius: 24px;
+            padding: 35px;
+            box-shadow: 0 20px 60px rgba(20, 30, 50, 0.08);
+        }
+
+        .auth-logo {
+            width: 65px;
+            height: 65px;
+            border-radius: 18px;
+            background: #172033;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            margin: 0 auto 20px;
+        }
+
+        .auth-card h1 {
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .auth-subtitle {
+            text-align: center;
+            color: #777f8c;
+            margin-bottom: 25px;
+        }
+
+        .auth-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            background: #f2f4f7;
+            padding: 5px;
+            border-radius: 13px;
+            margin-bottom: 22px;
+        }
+
+        .auth-tab {
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            background: transparent;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .auth-tab.active {
+            background: white;
+            box-shadow: 0 3px 10px rgba(0,0,0,.05);
+        }
+
+        .auth-form {
+            display: none;
+        }
+
+        .auth-form.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 7px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #d9dee7;
+            border-radius: 12px;
+            outline: none;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            border-color: #172033;
+        }
+
+        .auth-button {
+            width: 100%;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            background: #172033;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+
+        .auth-button:disabled {
+            opacity: .6;
+        }
+
+        .auth-message {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 14px;
+            min-height: 22px;
+        }
+
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #667085;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+<div class="auth-page">
+
+    <div class="auth-card">
+
+        <div class="auth-logo">
+            ⚛️
+        </div>
+
+        <h1>
+            Physics AI
+        </h1>
+
+        <p class="auth-subtitle">
+            مدرس الفيزياء الذكي
+        </p>
+
+
+        <div class="auth-tabs">
+
+            <button
+                class="auth-tab active"
+                id="loginTab"
+            >
+                تسجيل الدخول
+            </button>
+
+            <button
+                class="auth-tab"
+                id="registerTab"
+            >
+                إنشاء حساب
+            </button>
+
+        </div>
+
+
+        <!-- LOGIN -->
+
+        <form
+            id="loginForm"
+            class="auth-form active"
+        >
+
+            <div class="form-group">
+
+                <label>
+                    البريد الإلكتروني
+                </label>
+
+                <input
+                    id="loginEmail"
+                    type="email"
+                    placeholder="example@email.com"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    كلمة السر
+                </label>
+
+                <input
+                    id="loginPassword"
+                    type="password"
+                    placeholder="••••••••"
+                    required
+                >
+
+            </div>
+
+
+            <button
+                class="auth-button"
+                id="loginButton"
+                type="submit"
+            >
+                تسجيل الدخول
+            </button>
+
+        </form>
+
+
+        <!-- REGISTER -->
+
+        <form
+            id="registerForm"
+            class="auth-form"
+        >
+
+            <div class="form-group">
+
+                <label>
+                    الاسم
+                </label>
+
+                <input
+                    id="registerName"
+                    type="text"
+                    placeholder="اكتب اسمك"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    البريد الإلكتروني
+                </label>
+
+                <input
+                    id="registerEmail"
+                    type="email"
+                    placeholder="example@email.com"
+                    required
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label>
+                    كلمة السر
+                </label>
+
+                <input
+                    id="registerPassword"
+                    type="password"
+                    placeholder="6 أحرف على الأقل"
+                    minlength="6"
+                    required
+                >
+
+            </div>
+
+
+            <button
+                class="auth-button"
+                id="registerButton"
+                type="submit"
+            >
+                إنشاء الحساب
+            </button>
+
+        </form>
+
+
+        <div
+            id="authMessage"
+            class="auth-message"
+        ></div>
+
+
+        <a
+            href="/"
+            class="back-link"
+        >
+            العودة إلى Physics AI
+        </a>
+
+    </div>
+
+</div>
+
+
+<script>
+
+const loginTab =
+    document.getElementById(
+        "loginTab"
+    );
+
+const registerTab =
+    document.getElementById(
+        "registerTab"
+    );
+
+const loginForm =
+    document.getElementById(
+        "loginForm"
+    );
+
+const registerForm =
+    document.getElementById(
+        "registerForm"
+    );
+
+const authMessage =
+    document.getElementById(
+        "authMessage"
+    );
+
+
+loginTab.addEventListener(
+    "click",
+    function () {
+
+        loginTab.classList.add(
+            "active"
+        );
+
+        registerTab.classList.remove(
+            "active"
+        );
+
+        loginForm.classList.add(
+            "active"
+        );
+
+        registerForm.classList.remove(
+            "active"
+        );
+
+        authMessage.textContent =
+            "";
+
+    }
+);
+
+
+registerTab.addEventListener(
+    "click",
+    function () {
+
+        registerTab.classList.add(
+            "active"
+        );
+
+        loginTab.classList.remove(
+            "active"
+        );
+
+        registerForm.classList.add(
+            "active"
+        );
+
+        loginForm.classList.remove(
+            "active"
+        );
+
+        authMessage.textContent =
+            "";
+
+    }
+);
+
+
+/* LOGIN */
+
+loginForm.addEventListener(
+    "submit",
+    async function (event) {
+
+        event.preventDefault();
+
+        const button =
+            document.getElementById(
+                "loginButton"
+            );
+
+        button.disabled = true;
+
+        button.textContent =
+            "جاري تسجيل الدخول...";
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/auth/login",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            email:
+                                document
+                                    .getElementById(
+                                        "loginEmail"
+                                    )
+                                    .value,
+
+                            password:
+                                document
+                                    .getElementById(
+                                        "loginPassword"
+                                    )
+                                    .value
+
+                        })
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "حدث خطأ."
+                );
+
+            }
+
+
+            window.location.href =
+                "/study.html";
+
+
+        } catch (error) {
+
+            authMessage.textContent =
+                error.message;
+
+        } finally {
+
+            button.disabled =
+                false;
+
+            button.textContent =
+                "تسجيل الدخول";
+
+        }
+
+    }
+);
+
+
+/* REGISTER */
+
+registerForm.addEventListener(
+    "submit",
+    async function (event) {
+
+        event.preventDefault();
+
+        const button =
+            document.getElementById(
+                "registerButton"
+            );
+
+        button.disabled = true;
+
+        button.textContent =
+            "جاري إنشاء الحساب...";
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/auth/register",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            name:
+                                document
+                                    .getElementById(
+                                        "registerName"
+                                    )
+                                    .value,
+
+                            email:
+                                document
+                                    .getElementById(
+                                        "registerEmail"
+                                    )
+                                    .value,
+
+                            password:
+                                document
+                                    .getElementById(
+                                        "registerPassword"
+                                    )
+                                    .value
+
+                        })
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "حدث خطأ."
+                );
+
+            }
+
+
+            window.location.href =
+                "/study.html";
+
+
+        } catch (error) {
+
+            authMessage.textContent =
+                error.message;
+
+        } finally {
+
+            button.disabled =
+                false;
+
+            button.textContent =
+                "إنشاء الحساب";
+
+        }
+
+    }
+);
+
+</script>
+
+</body>
+
+</html>
