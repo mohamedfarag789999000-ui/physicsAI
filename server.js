@@ -12,6 +12,7 @@ const { toFile } = require("openai/uploads");
 const app = express();
 
 const PORT = process.env.PORT || 3000;
+app.set("trust proxy", 1);
 
 /* =========================================================
    DATABASE
@@ -115,8 +116,7 @@ app.use(
              * localhost = false
              * production HTTPS = true
              */
-            secure:
-                process.env.NODE_ENV === "production",
+          secure: true,
 
             maxAge:
                 1000 *
