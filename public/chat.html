@@ -1,1737 +1,2683 @@
-/* =========================================================
-   PHYSICS AI — PREMIUM CHAT UI
-   نفس IDs الحالية — بدون تغيير منطق الشات
-========================================================= */
+(() => {
+    "use strict";
 
-:root {
-    --bg: #0b0e13;
-    --bg-soft: #10141b;
-    --surface: #151a22;
-    --surface-2: #1b212b;
-    --surface-3: #222936;
-
-    --line: rgba(255, 255, 255, 0.075);
-
-    --text: #f5f7fb;
-    --muted: #98a2b3;
-
-    --accent: #7658ff;
-    --accent-hover: #6546ec;
-
-    --success: #43d49a;
-    --danger: #ff5c6c;
-
-    --user-bubble: #2a303c;
-
-    --shadow:
-        0 18px 50px rgba(0, 0, 0, 0.28);
-}
-
-body.light {
-    --bg: #f7f8fb;
-    --bg-soft: #f0f2f6;
-    --surface: #ffffff;
-    --surface-2: #f1f3f7;
-    --surface-3: #e8ebf1;
-
-    --line: rgba(16, 24, 40, 0.08);
-
-    --text: #171b23;
-    --muted: #697386;
-
-    --accent: #6847ff;
-    --accent-hover: #5737e8;
-
-    --user-bubble: #ece9ff;
-
-    --shadow:
-        0 18px 45px rgba(16, 24, 40, 0.08);
-}
+    /* =========================================================
+       PHYSICS AI - FRONTEND
+       الملف مسؤول عن:
+       - الشات
+       - تسجيل الدخول
+       - المحادثات
+       - الصور
+       - الكاميرا
+       - الصوت
+       - الاتصال بالسيرفر
+    ========================================================= */
 
 
-/* =========================================================
-   RESET
-========================================================= */
+    /* =========================================================
+       DOM HELPERS
+    ========================================================= */
 
-* {
-    box-sizing: border-box;
-}
-
-html,
-body {
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-}
-
-body {
-    background: var(--bg);
-    color: var(--text);
-
-    font-family:
-        Inter,
-        "Segoe UI",
-        Tahoma,
-        Arial,
-        sans-serif;
-
-    overflow: hidden;
-
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-}
-
-button,
-textarea,
-input,
-select {
-    font: inherit;
-}
-
-button {
-    border: 0;
-}
-
-a {
-    color: inherit;
-}
+    const $ = (id) =>
+        document.getElementById(id);
 
 
-/* =========================================================
-   TOP BAR
-========================================================= */
+    /* =========================================================
+       DOM ELEMENTS
+    ========================================================= */
 
-.chat-topbar {
-    height: 64px;
+    const messageInput =
+        $("messageInput");
 
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    const sendButton =
+        $("sendButton");
 
-    padding: 0 18px;
-
-    background: var(--surface);
-
-    border-bottom:
-        1px solid var(--line);
-
-    position: relative;
-
-    z-index: 20;
-}
+    const chat =
+        $("chat");
 
 
-/* brand */
+    const sidebar =
+        $("sidebar");
 
-.chat-brand {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-}
+    const newChatButton =
+        $("newChatButton");
 
-.chat-logo {
-    width: 40px;
-    height: 40px;
+    const conversationList =
+        $("conversationList");
 
-    border-radius: 12px;
+    const userName =
+        $("userName");
 
-    display: grid;
-    place-items: center;
+    const logoutButton =
+        $("logoutButton");
 
-    color: #fff;
 
-    font-size: 20px;
-    font-weight: 900;
+    const chatMode =
+        $("chatMode");
 
-    background:
-        linear-gradient(
-            135deg,
-            var(--accent),
-            #a48dff
+    const lessonName =
+        $("lessonName");
+
+    const lessonDescription =
+        $("lessonDescription");
+
+
+    /* =========================================================
+       IMAGE ELEMENTS
+    ========================================================= */
+
+    const imagePreview =
+        $("imagePreview");
+
+    const previewImage =
+        $("previewImage");
+
+    const removeImageButton =
+        $("removeImageButton");
+
+    const uploadButton =
+        $("uploadButton");
+
+    const cameraButton =
+        $("cameraButton");
+
+    const imageInput =
+        $("imageInput");
+
+    const cameraInput =
+        $("cameraInput");
+
+
+    /* =========================================================
+       VOICE ELEMENTS
+    ========================================================= */
+
+    const voiceButton =
+        $("voiceButton");
+
+    const voiceStatus =
+        $("voiceStatus");
+
+
+    /* =========================================================
+       CAMERA ELEMENTS
+    ========================================================= */
+
+    const cameraModal =
+        $("cameraModal");
+
+    const closeCameraButton =
+        $("closeCameraButton");
+
+    const cameraVideo =
+        $("cameraVideo");
+
+    const cameraCanvas =
+        $("cameraCanvas");
+
+    const takePhotoButton =
+        $("takePhotoButton");
+
+    const cameraError =
+        $("cameraError");
+
+
+    /* =========================================================
+       STATE
+    ========================================================= */
+
+    let conversationHistory = [];
+
+    let activeConversationId =
+        null;
+
+    let pendingImage =
+        null;
+
+    let cameraStream =
+        null;
+
+    let mediaRecorder =
+        null;
+
+    let audioChunks =
+        [];
+
+    let isSending =
+        false;
+
+
+    /* =========================================================
+       URL / SESSION CONTEXT
+    ========================================================= */
+
+    const params =
+        new URLSearchParams(
+            window.location.search
         );
 
-    box-shadow:
-        0 9px 28px
-        rgba(118, 88, 255, .25);
-}
 
-.chat-brand strong {
-    display: block;
+    const sessionContext = {
 
-    font-size: 15px;
-    font-weight: 850;
+        mode:
+            params.get("mode") ||
+            "general",
 
-    line-height: 1.15;
-}
+        grade:
+            params.get("grade") ||
+            "غير محدد",
 
-.chat-brand span {
-    display: block;
+        subject:
+            params.get("subject") ||
+            "الفيزياء",
 
-    margin-top: 3px;
+        unit:
+            params.get("unit") ||
+            "غير محددة",
 
-    color: var(--muted);
+        lesson:
+            params.get("lesson") ||
+            "دردشة عامة",
 
-    font-size: 10px;
-}
-
-
-/* top actions */
-
-.top-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.user-name {
-    max-width: 170px;
-
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
-    color: var(--muted);
-    font-size: 11px;
-}
-
-.logout-button {
-    min-height: 36px;
-
-    padding: 0 12px;
-
-    border-radius: 10px;
-
-    background: var(--surface-2);
-    color: var(--text);
-
-    cursor: pointer;
-
-    transition:
-        background .2s ease,
-        transform .2s ease;
-}
-
-.logout-button:hover {
-    background: var(--surface-3);
-    transform: translateY(-1px);
-}
+        description:
+            params.get("description") ||
+            "مساعدك الذكي لفهم الفيزياء وحل المسائل."
+    };
 
 
-/* =========================================================
-   LAYOUT
-========================================================= */
+    /* =========================================================
+       SESSION CONTEXT
+    ========================================================= */
 
-.chat-layout {
-    width: 100%;
+    function renderSessionContext() {
 
-    height:
-        calc(100dvh - 64px);
+        if (chatMode) {
 
-    display: flex;
+            if (
+                sessionContext.mode ===
+                "encyclopedia"
+            ) {
 
-    background: var(--bg);
-}
+                chatMode.textContent =
+                    "موسوعة الفيزياء";
 
+            } else if (
+                sessionContext.mode ===
+                "curriculum"
+            ) {
 
-/* =========================================================
-   SIDEBAR
-========================================================= */
+                chatMode.textContent =
+                    "جلسة المنهج";
 
-.sidebar {
-    width: 286px;
-    min-width: 286px;
+            } else {
 
-    height: 100%;
-
-    display: flex;
-    flex-direction: column;
-
-    background: var(--surface);
-
-    border-left:
-        1px solid var(--line);
-
-    transition:
-        width .25s ease,
-        min-width .25s ease,
-        transform .25s ease;
-}
-
-.sidebar.collapsed {
-    width: 0;
-    min-width: 0;
-
-    overflow: hidden;
-
-    border-left: 0;
-}
+                chatMode.textContent =
+                    "المساعد الذكي";
+            }
+        }
 
 
-/* new chat */
+        if (lessonName) {
 
-.new-chat {
-    width: calc(100% - 24px);
+            lessonName.textContent =
+                sessionContext.lesson ||
+                "دردشة عامة";
+        }
 
-    height: 44px;
 
-    margin: 14px 12px 12px;
+        if (lessonDescription) {
 
-    border-radius: 12px;
+            lessonDescription.textContent =
+                sessionContext.description;
+        }
+    }
 
-    background:
-        linear-gradient(
-            135deg,
-            var(--accent),
-            #896fff
+
+    /* =========================================================
+       TEXTAREA
+    ========================================================= */
+
+    function resizeTextarea() {
+
+        if (!messageInput) {
+            return;
+        }
+
+
+        messageInput.style.height =
+            "auto";
+
+
+        const height =
+            Math.min(
+                messageInput.scrollHeight,
+                160
+            );
+
+
+        messageInput.style.height =
+            `${height}px`;
+    }
+
+
+    /* =========================================================
+       SAFE HTML
+    ========================================================= */
+
+    function escapeHtml(
+        value
+    ) {
+
+        return String(
+            value ?? ""
+        )
+
+            .replaceAll(
+                "&",
+                "&amp;"
+            )
+
+            .replaceAll(
+                "<",
+                "&lt;"
+            )
+
+            .replaceAll(
+                ">",
+                "&gt;"
+            )
+
+            .replaceAll(
+                '"',
+                "&quot;"
+            )
+
+            .replaceAll(
+                "'",
+                "&#039;"
+            );
+    }
+
+
+    /* =========================================================
+       MESSAGE RENDERING
+    ========================================================= */
+
+    function addMessage(
+        text,
+        type,
+        image = null
+    ) {
+
+        if (!chat) {
+            return;
+        }
+
+
+        const wrapper =
+            document.createElement(
+                "div"
+            );
+
+
+        wrapper.className =
+            `message ${type}`;
+
+
+        const avatar =
+            document.createElement(
+                "div"
+            );
+
+
+        avatar.className =
+            "avatar";
+
+
+        avatar.textContent =
+            type === "user"
+                ? "أنت"
+                : "AI";
+
+
+        const bubble =
+            document.createElement(
+                "div"
+            );
+
+
+        bubble.className =
+            "bubble";
+
+
+        const name =
+            document.createElement(
+                "strong"
+            );
+
+
+        name.textContent =
+            type === "user"
+                ? "أنت"
+                : "Physics AI";
+
+
+        bubble.appendChild(
+            name
         );
 
-    color: #fff;
 
-    font-size: 13px;
-    font-weight: 800;
+        /* -----------------------------------------------------
+           IMAGE
+        ----------------------------------------------------- */
 
-    cursor: pointer;
+        if (image) {
 
-    box-shadow:
-        0 9px 22px
-        rgba(118, 88, 255, .19);
+            const imageElement =
+                document.createElement(
+                    "img"
+                );
 
-    transition:
-        transform .2s ease,
-        box-shadow .2s ease,
-        background .2s ease;
-}
 
-.new-chat:hover {
-    transform: translateY(-1px);
+            imageElement.src =
+                image;
 
-    box-shadow:
-        0 13px 28px
-        rgba(118, 88, 255, .23);
 
-    background:
-        linear-gradient(
-            135deg,
-            var(--accent-hover),
-            #8066f4
-        );
-}
+            imageElement.alt =
+                "الصورة المرفقة";
 
 
-/* title */
+            imageElement.style.maxWidth =
+                "280px";
 
-.sidebar-title {
-    padding:
-        10px 16px 9px;
 
-    color: var(--muted);
+            imageElement.style.width =
+                "100%";
 
-    font-size: 10px;
 
-    font-weight: 850;
+            imageElement.style.display =
+                "block";
 
-    text-transform: uppercase;
 
-    letter-spacing: .03em;
-}
+            imageElement.style.borderRadius =
+                "12px";
 
 
-/* conversations */
+            imageElement.style.marginTop =
+                "10px";
 
-.conversation-list {
-    flex: 1;
 
-    min-height: 0;
+            imageElement.style.marginBottom =
+                "10px";
 
-    overflow-y: auto;
 
-    padding:
-        0 9px 10px;
-}
+            bubble.appendChild(
+                imageElement
+            );
+        }
 
-.conversation-list::-webkit-scrollbar {
-    width: 5px;
-}
 
-.conversation-list::-webkit-scrollbar-thumb {
-    background:
-        rgba(127, 127, 127, .22);
+        /* -----------------------------------------------------
+           TEXT
+        ----------------------------------------------------- */
 
-    border-radius: 20px;
-}
+        const paragraph =
+            document.createElement(
+                "p"
+            );
 
 
-/* item */
+        paragraph.innerHTML =
+            escapeHtml(
+                text
+            ).replaceAll(
+                "\n",
+                "<br>"
+            );
 
-.conversation-item {
-    width: 100%;
 
-    display: block;
-
-    padding:
-        11px 12px;
-
-    margin-bottom: 3px;
-
-    border-radius: 11px;
-
-    background: transparent;
-
-    color: var(--text);
-
-    text-align: right;
-
-    cursor: pointer;
-
-    transition:
-        background .18s ease;
-}
-
-.conversation-item:hover {
-    background:
-        var(--surface-2);
-}
-
-.conversation-item.active {
-    background:
-        var(--surface-2);
-
-    box-shadow:
-        inset -2px 0 0 var(--accent);
-}
-
-.conversation-item-title {
-    overflow: hidden;
-
-    text-overflow: ellipsis;
-
-    white-space: nowrap;
-
-    font-size: 12px;
-
-    font-weight: 650;
-
-    line-height: 1.45;
-}
-
-.conversation-item-date {
-    margin-top: 4px;
-
-    color: var(--muted);
-
-    font-size: 9px;
-}
-
-
-/* study link */
-
-.study-link {
-    margin:
-        8px 12px 14px;
-
-    padding:
-        12px 13px;
-
-    display: block;
-
-    border:
-        1px solid var(--line);
-
-    border-radius: 11px;
-
-    background:
-        var(--surface-2);
-
-    color:
-        var(--text);
-
-    text-decoration:
-        none;
-
-    font-size:
-        11px;
-
-    font-weight:
-        700;
-
-    transition:
-        background .2s ease,
-        border-color .2s ease;
-}
-
-.study-link:hover {
-    background:
-        var(--surface-3);
-
-    border-color:
-        rgba(118, 88, 255, .3);
-}
-
-
-/* =========================================================
-   MAIN CHAT
-========================================================= */
-
-.chat-main {
-    position: relative;
-
-    flex: 1;
-
-    min-width: 0;
-
-    height: 100%;
-
-    display: flex;
-
-    flex-direction: column;
-
-    background:
-        var(--bg);
-}
-
-
-/* =========================================================
-   LESSON BAR
-========================================================= */
-
-.lesson-bar {
-    padding:
-        13px 20px;
-
-    background:
-        var(--bg-soft);
-
-    border-bottom:
-        1px solid var(--line);
-}
-
-.lesson-bar > div {
-    width:
-        min(920px, 100%);
-
-    margin:
-        0 auto;
-}
-
-.lesson-badge {
-    display:
-        inline-flex;
-
-    align-items:
-        center;
-
-    min-height:
-        25px;
-
-    padding:
-        0 9px;
-
-    border-radius:
-        999px;
-
-    background:
-        rgba(118, 88, 255, .11);
-
-    color:
-        var(--accent);
-
-    font-size:
-        9px;
-
-    font-weight:
-        850;
-}
-
-.lesson-bar h2 {
-    margin:
-        5px 0 2px;
-
-    font-size:
-        14px;
-
-    line-height:
-        1.35;
-
-    font-weight:
-        800;
-}
-
-.lesson-bar p {
-    margin:
-        0;
-
-    color:
-        var(--muted);
-
-    font-size:
-        10px;
-
-    line-height:
-        1.5;
-}
-
-
-/* =========================================================
-   CHAT AREA
-========================================================= */
-
-.chat {
-    flex: 1;
-
-    min-height: 0;
-
-    overflow-y: auto;
-
-    padding:
-        30px 20px 170px;
-}
-
-.chat::-webkit-scrollbar {
-    width: 7px;
-}
-
-.chat::-webkit-scrollbar-thumb {
-    background:
-        rgba(127, 127, 127, .20);
-
-    border-radius:
-        20px;
-}
-
-.chat::-webkit-scrollbar-track {
-    background:
-        transparent;
-}
-
-
-/* =========================================================
-   WELCOME
-========================================================= */
-
-.welcome {
-    width:
-        min(720px, 100%);
-
-    margin:
-        60px auto 40px;
-
-    text-align:
-        center;
-}
-
-.welcome-icon {
-    width:
-        70px;
-
-    height:
-        70px;
-
-    margin:
-        0 auto 17px;
-
-    display:
-        grid;
-
-    place-items:
-        center;
-
-    border-radius:
-        21px;
-
-    background:
-        linear-gradient(
-            135deg,
-            var(--accent),
-            #a58fff
+        bubble.appendChild(
+            paragraph
         );
 
-    color:
-        white;
 
-    font-size:
-        27px;
-
-    box-shadow:
-        0 18px 40px
-        rgba(118, 88, 255, .22);
-}
-
-.welcome h1 {
-    margin:
-        0;
-
-    font-size:
-        clamp(25px, 4vw, 38px);
-
-    line-height:
-        1.2;
-
-    letter-spacing:
-        -.03em;
-}
-
-.welcome p {
-    width:
-        min(580px, 100%);
-
-    margin:
-        13px auto 0;
-
-    color:
-        var(--muted);
-
-    font-size:
-        13px;
-
-    line-height:
-        1.9;
-}
-
-
-/* =========================================================
-   MESSAGES
-========================================================= */
-
-.message {
-    width:
-        min(900px, 100%);
-
-    margin:
-        0 auto 20px;
-
-    display:
-        flex;
-
-    align-items:
-        flex-start;
-
-    gap:
-        11px;
-}
-
-
-/* avatar */
-
-.message .avatar {
-    width:
-        34px;
-
-    height:
-        34px;
-
-    flex:
-        0 0 34px;
-
-    display:
-        grid;
-
-    place-items:
-        center;
-
-    border-radius:
-        11px;
-
-    background:
-        linear-gradient(
-            135deg,
-            var(--accent),
-            #a58fff
+        wrapper.appendChild(
+            avatar
         );
 
-    color:
-        #fff;
 
-    font-size:
-        13px;
-}
+        wrapper.appendChild(
+            bubble
+        );
 
-.message.user .avatar {
-    background:
-        #606a7b;
-}
 
+        chat.appendChild(
+            wrapper
+        );
 
-/* bubble */
 
-.message .bubble {
-    max-width:
-        min(80%, 760px);
+        requestAnimationFrame(
+            () => {
 
-    min-width:
-        0;
-
-    color:
-        var(--text);
-
-    font-size:
-        14px;
-
-    line-height:
-        1.9;
-}
-
-
-/* sender */
-
-.message .bubble strong {
-    display:
-        block;
-
-    margin-bottom:
-        4px;
-
-    color:
-        var(--muted);
-
-    font-size:
-        10px;
-
-    font-weight:
-        750;
-}
-
-
-/* paragraph */
-
-.message .bubble p {
-    margin:
-        0;
-
-    white-space:
-        pre-wrap;
-
-    overflow-wrap:
-        anywhere;
-}
-
-
-/* user message */
-
-.message.user {
-    justify-content:
-        flex-start;
-}
-
-.message.user .bubble {
-    padding:
-        11px 14px;
-
-    background:
-        var(--user-bubble);
-
-    border-radius:
-        16px 7px 16px 16px;
-}
-
-
-/* assistant */
-
-.message.bot .bubble,
-.message.assistant .bubble {
-    padding:
-        2px 0;
-}
-
-
-/* =========================================================
-   IMAGE IN CHAT
-========================================================= */
-
-.message .bubble img {
-    max-width:
-        min(380px, 100%);
-
-    height:
-        auto;
-
-    display:
-        block;
-
-    margin-top:
-        10px;
-
-    border-radius:
-        13px;
-
-    border:
-        1px solid var(--line);
-
-    box-shadow:
-        0 8px 24px
-        rgba(0, 0, 0, .14);
-}
-
-
-/* =========================================================
-   IMAGE PREVIEW
-========================================================= */
-
-.image-preview {
-    position:
-        absolute;
-
-    left:
-        0;
-
-    right:
-        0;
-
-    bottom:
-        92px;
-
-    width:
-        min(900px, calc(100% - 24px));
-
-    margin:
-        0 auto;
-
-    z-index:
-        9;
-}
-
-.image-preview.hidden {
-    display:
-        none;
-}
-
-.image-preview img {
-    width:
-        92px;
-
-    height:
-        72px;
-
-    object-fit:
-        cover;
-
-    display:
-        block;
-
-    border-radius:
-        12px;
-
-    border:
-        1px solid var(--line);
-
-    box-shadow:
-        var(--shadow);
-}
-
-#removeImageButton {
-    position:
-        absolute;
-
-    top:
-        -7px;
-
-    right:
-        auto;
-
-    left:
-        72px;
-
-    width:
-        22px;
-
-    height:
-        22px;
-
-    border-radius:
-        50%;
-
-    background:
-        var(--danger);
-
-    color:
-        white;
-
-    font-size:
-        15px;
-
-    cursor:
-        pointer;
-
-    display:
-        grid;
-
-    place-items:
-        center;
-}
-
-
-/* =========================================================
-   INPUT AREA
-========================================================= */
-
-.input-wrapper {
-    position:
-        absolute;
-
-    left:
-        0;
-
-    right:
-        0;
-
-    bottom:
-        10px;
-
-    width:
-        min(920px, calc(100% - 24px));
-
-    min-height:
-        60px;
-
-    margin:
-        auto;
-
-    display:
-        flex;
-
-    align-items:
-        flex-end;
-
-    gap:
-        6px;
-
-    padding:
-        8px;
-
-    border:
-        1px solid var(--line);
-
-    border-radius:
-        19px;
-
-    background:
-        var(--surface);
-
-    box-shadow:
-        var(--shadow);
-
-    z-index:
-        10;
-}
-
-
-/* tool group */
-
-.tools {
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    gap:
-        4px;
-}
-
-
-/* buttons */
-
-.tool-button,
-.send-button {
-    width:
-        42px;
-
-    height:
-        42px;
-
-    flex:
-        0 0 42px;
-
-    display:
-        grid;
-
-    place-items:
-        center;
-
-    border-radius:
-        12px;
-
-    color:
-        var(--text);
-
-    background:
-        var(--surface-2);
-
-    cursor:
-        pointer;
-
-    transition:
-        transform .18s ease,
-        background .18s ease;
-}
-
-.tool-button:hover {
-    background:
-        var(--surface-3);
-
-    transform:
-        translateY(-1px);
-}
-
-.send-button {
-    color:
-        white;
-
-    background:
-        var(--accent);
-
-    font-size:
-        20px;
-}
-
-.send-button:hover {
-    background:
-        var(--accent-hover);
-
-    transform:
-        translateY(-1px);
-}
-
-.send-button:disabled {
-    opacity:
-        .45;
-
-    transform:
-        none;
-}
-
-
-/* textarea */
-
-#messageInput {
-    flex:
-        1;
-
-    min-width:
-        0;
-
-    min-height:
-        42px;
-
-    max-height:
-        150px;
-
-    resize:
-        none;
-
-    border:
-        0;
-
-    outline:
-        0;
-
-    background:
-        transparent;
-
-    color:
-        var(--text);
-
-    padding:
-        10px 8px;
-
-    font-size:
-        14px;
-
-    line-height:
-        1.65;
-}
-
-#messageInput::placeholder {
-    color:
-        var(--muted);
-}
-
-
-/* hint */
-
-.input-hint {
-    width:
-        min(900px, calc(100% - 24px));
-
-    margin:
-        0 auto;
-
-    text-align:
-        center;
-
-    color:
-        var(--muted);
-
-    font-size:
-        9px;
-}
-
-.input-hint span {
-    margin:
-        0 5px;
-}
-
-
-/* voice */
-
-.voice-status {
-    min-height:
-        14px;
-
-    width:
-        min(900px, calc(100% - 24px));
-
-    margin:
-        0 auto;
-
-    color:
-        var(--accent);
-
-    font-size:
-        10px;
-
-    text-align:
-        center;
-}
-
-
-/* =========================================================
-   CAMERA MODAL
-========================================================= */
-
-.modal {
-    position:
-        fixed;
-
-    inset:
-        0;
-
-    z-index:
-        500;
-
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-
-    padding:
-        16px;
-
-    background:
-        rgba(0,0,0,.72);
-}
-
-.modal.hidden {
-    display:
-        none;
-}
-
-.modal-card {
-    width:
-        min(530px,100%);
-
-    padding:
-        16px;
-
-    border:
-        1px solid var(--line);
-
-    border-radius:
-        20px;
-
-    background:
-        var(--surface);
-
-    box-shadow:
-        0 25px 80px
-        rgba(0,0,0,.38);
-}
-
-.modal-header {
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        space-between;
-
-    margin-bottom:
-        12px;
-}
-
-.modal-header h3 {
-    margin:
-        0;
-
-    font-size:
-        15px;
-}
-
-.modal-header button {
-    width:
-        36px;
-
-    height:
-        36px;
-
-    border-radius:
-        10px;
-
-    background:
-        var(--surface-2);
-
-    color:
-        var(--text);
-
-    cursor:
-        pointer;
-
-    font-size:
-        19px;
-}
-
-#cameraVideo {
-    width:
-        100%;
-
-    aspect-ratio:
-        4 / 3;
-
-    display:
-        block;
-
-    border-radius:
-        14px;
-
-    object-fit:
-        cover;
-
-    background:
-        #000;
-}
-
-#cameraCanvas {
-    display:
-        none;
-}
-
-.capture-button {
-    width:
-        100%;
-
-    height:
-        45px;
-
-    margin-top:
-        12px;
-
-    border-radius:
-        12px;
-
-    background:
-        var(--accent);
-
-    color:
-        white;
-
-    font-weight:
-        800;
-
-    cursor:
-        pointer;
-}
-
-.camera-error {
-    min-height:
-        18px;
-
-    color:
-        var(--danger);
-
-    text-align:
-        center;
-
-    font-size:
-        11px;
-}
-
-
-/* =========================================================
-   MOBILE
-========================================================= */
-
-@media (max-width: 900px) {
-
-    .chat-topbar {
-        height:
-            58px;
-
-        padding:
-            0 10px;
+                chat.scrollTop =
+                    chat.scrollHeight;
+            }
+        );
     }
 
-    .chat-layout {
-        height:
-            calc(100dvh - 58px);
+
+    /* =========================================================
+       WELCOME SCREEN
+    ========================================================= */
+
+    function showWelcome() {
+
+        if (!chat) {
+            return;
+        }
+
+
+        chat.innerHTML = `
+
+            <div class="welcome">
+
+                <div class="welcome-topline"></div>
+
+                <div class="welcome-number">
+                    PHYSICS AI / START
+                </div>
+
+                <h2>
+                    خلينا نفهم
+                    <span>
+                        الفيزياء.
+                    </span>
+                </h2>
+
+                <p class="welcome-description">
+                    اسأل عن أي فكرة،
+                    حل مسألة،
+                    ابعت صورة،
+                    أو سجل صوتك.
+                    المدرس الذكي هيمشي معاك خطوة بخطوة.
+                </p>
+
+                <div class="quick-prompts">
+
+                    <button
+                        class="quick-card"
+                        type="button"
+                        data-prompt="اشرح لي قانون نيوتن الثاني ببساطة"
+                    >
+                        <span class="quick-card-number">
+                            01
+                        </span>
+
+                        <strong>
+                            اشرحلي مفهوم
+                        </strong>
+
+                        <span>
+                            شرح بسيط من غير تعقيد
+                        </span>
+                    </button>
+
+
+                    <button
+                        class="quick-card"
+                        type="button"
+                        data-prompt="حل المسألة دي خطوة بخطوة"
+                    >
+                        <span class="quick-card-number">
+                            02
+                        </span>
+
+                        <strong>
+                            حل مسألة
+                        </strong>
+
+                        <span>
+                            المعطيات ثم القانون ثم الحل
+                        </span>
+                    </button>
+
+
+                    <button
+                        class="quick-card"
+                        type="button"
+                        data-prompt="راجعلي أهم قوانين الدرس"
+                    >
+                        <span class="quick-card-number">
+                            03
+                        </span>
+
+                        <strong>
+                            مراجعة سريعة
+                        </strong>
+
+                        <span>
+                            أهم القوانين والأفكار
+                        </span>
+                    </button>
+
+
+                    <button
+                        class="quick-card"
+                        type="button"
+                        data-prompt="اختبرني في الفيزياء"
+                    >
+                        <span class="quick-card-number">
+                            04
+                        </span>
+
+                        <strong>
+                            اختبرني
+                        </strong>
+
+                        <span>
+                            سؤال وراء سؤال
+                        </span>
+                    </button>
+
+                </div>
+
+            </div>
+        `;
+
+
+        /* -----------------------------------------------------
+           QUICK PROMPTS
+        ----------------------------------------------------- */
+
+        chat
+            .querySelectorAll(
+                "[data-prompt]"
+            )
+            .forEach(
+                button => {
+
+                    button.addEventListener(
+                        "click",
+                        () => {
+
+                            if (
+                                !messageInput
+                            ) {
+                                return;
+                            }
+
+
+                            messageInput.value =
+                                button.dataset.prompt ||
+                                "";
+
+
+                            resizeTextarea();
+
+
+                            messageInput.focus();
+                        }
+                    );
+                }
+            );
     }
 
-    .sidebar {
-        position:
-            fixed;
 
-        top:
-            58px;
+    /* =========================================================
+       API RESPONSE PARSER
+    ========================================================= */
 
-        right:
-            0;
+    async function parseResponse(
+        response
+    ) {
 
-        bottom:
-            0;
+        const contentType =
+            response.headers.get(
+                "content-type"
+            ) || "";
 
-        width:
-            min(86vw, 320px);
 
-        min-width:
-            min(86vw, 320px);
+        if (
+            contentType.includes(
+                "application/json"
+            )
+        ) {
 
-        transform:
-            translateX(105%);
+            try {
 
-        box-shadow:
-            -18px 0 50px
-            rgba(0,0,0,.30);
+                return await response.json();
 
-        z-index:
-            100;
+            } catch {
+
+                return {
+                    error:
+                        "تعذر قراءة استجابة السيرفر."
+                };
+            }
+        }
+
+
+        const text =
+            await response.text();
+
+
+        return {
+
+            error:
+                text ||
+                "حدث خطأ غير معروف."
+        };
     }
 
-    .sidebar.mobile-open {
-        transform:
-            translateX(0);
+
+    /* =========================================================
+       API HELPER
+    ========================================================= */
+
+    async function api(
+        url,
+        options = {}
+    ) {
+
+        const response =
+            await fetch(
+                url,
+                {
+                    credentials:
+                        "same-origin",
+
+                    ...options
+                }
+            );
+
+
+        const data =
+            await parseResponse(
+                response
+            );
+
+
+        if (
+            !response.ok
+        ) {
+
+            const error =
+                new Error(
+                    data?.error ||
+                    "حدث خطأ."
+                );
+
+
+            error.status =
+                response.status;
+
+
+            throw error;
+        }
+
+
+        return data;
     }
 
-    .sidebar.collapsed {
-        width:
-            min(86vw, 320px);
 
-        min-width:
-            min(86vw, 320px);
+    /* =========================================================
+       AUTH
+    ========================================================= */
 
-        transform:
-            translateX(105%);
+    async function loadCurrentUser() {
+
+        try {
+
+            const data =
+                await api(
+                    "/api/auth/me"
+                );
+
+
+            if (
+                !data.loggedIn
+            ) {
+
+                window.location.href =
+                    "/login.html";
+
+
+                return false;
+            }
+
+
+            if (userName) {
+
+                userName.textContent =
+                    data.user?.name ||
+                    "الطالب";
+            }
+
+
+            return true;
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "AUTH ERROR:",
+                error
+            );
+
+
+            window.location.href =
+                "/login.html";
+
+
+            return false;
+        }
     }
 
-    .user-name {
-        display:
-            none;
+
+    /* =========================================================
+       LOGOUT
+    ========================================================= */
+
+    logoutButton?.addEventListener(
+        "click",
+        async () => {
+
+            try {
+
+                await api(
+                    "/api/auth/logout",
+                    {
+                        method:
+                            "POST"
+                    }
+                );
+
+            } catch (
+                error
+            ) {
+
+                console.error(
+                    "LOGOUT ERROR:",
+                    error
+                );
+
+            } finally {
+
+                window.location.href =
+                    "/login.html";
+            }
+        }
+    );
+
+
+    /* =========================================================
+       CONVERSATIONS
+    ========================================================= */
+
+    async function loadConversations() {
+
+        if (
+            !conversationList
+        ) {
+
+            return;
+        }
+
+
+        try {
+
+            const data =
+                await api(
+                    "/api/conversations"
+                );
+
+
+            conversationList.innerHTML =
+                "";
+
+
+            const conversations =
+                Array.isArray(
+                    data.conversations
+                )
+                    ? data.conversations
+                    : [];
+
+
+            if (
+                conversations.length === 0
+            ) {
+
+                const empty =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                empty.textContent =
+                    "مفيش محادثات لسه.";
+
+
+                empty.style.padding =
+                    "15px";
+
+
+                empty.style.textAlign =
+                    "center";
+
+
+                empty.style.opacity =
+                    "0.55";
+
+
+                empty.style.fontSize =
+                    "11px";
+
+
+                conversationList.appendChild(
+                    empty
+                );
+
+
+                return;
+            }
+
+
+            conversations.forEach(
+                conversation => {
+
+                    const item =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    item.className =
+                        "conversation-item";
+
+
+                    if (
+                        Number(
+                            conversation.id
+                        ) ===
+                        Number(
+                            activeConversationId
+                        )
+                    ) {
+
+                        item.classList.add(
+                            "active"
+                        );
+                    }
+
+
+                    /* -------------------------------------------------
+                       TITLE
+                    ------------------------------------------------- */
+
+                    const title =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    title.className =
+                        "conversation-title";
+
+
+                    title.textContent =
+                        conversation.title ||
+                        "محادثة جديدة";
+
+
+                    /* -------------------------------------------------
+                       DELETE
+                    ------------------------------------------------- */
+
+                    const deleteButton =
+                        document.createElement(
+                            "button"
+                        );
+
+
+                    deleteButton.className =
+                        "delete-conversation";
+
+
+                    deleteButton.type =
+                        "button";
+
+
+                    deleteButton.textContent =
+                        "×";
+
+
+                    deleteButton.title =
+                        "حذف المحادثة";
+
+
+                    /* -------------------------------------------------
+                       OPEN
+                    ------------------------------------------------- */
+
+                    item.addEventListener(
+                        "click",
+                        async event => {
+
+                            if (
+                                event.target ===
+                                deleteButton
+                            ) {
+
+                                return;
+                            }
+
+
+                            await loadConversation(
+                                Number(
+                                    conversation.id
+                                )
+                            );
+                        }
+                    );
+
+
+                    /* -------------------------------------------------
+                       DELETE ACTION
+                    ------------------------------------------------- */
+
+                    deleteButton.addEventListener(
+                        "click",
+                        async event => {
+
+                            event.stopPropagation();
+
+
+                            const ok =
+                                window.confirm(
+                                    "حذف هذه المحادثة؟"
+                                );
+
+
+                            if (
+                                !ok
+                            ) {
+
+                                return;
+                            }
+
+
+                            try {
+
+                                await api(
+                                    `/api/conversations/${conversation.id}`,
+                                    {
+                                        method:
+                                            "DELETE"
+                                    }
+                                );
+
+
+                                if (
+                                    Number(
+                                        activeConversationId
+                                    ) ===
+                                    Number(
+                                        conversation.id
+                                    )
+                                ) {
+
+                                    activeConversationId =
+                                        null;
+
+
+                                    conversationHistory =
+                                        [];
+
+
+                                    showWelcome();
+                                }
+
+
+                                await loadConversations();
+
+                            } catch (
+                                error
+                            ) {
+
+                                console.error(
+                                    "DELETE CONVERSATION ERROR:",
+                                    error
+                                );
+
+
+                                alert(
+                                    error.message ||
+                                    "تعذر حذف المحادثة."
+                                );
+                            }
+                        }
+                    );
+
+
+                    item.appendChild(
+                        title
+                    );
+
+
+                    item.appendChild(
+                        deleteButton
+                    );
+
+
+                    conversationList.appendChild(
+                        item
+                    );
+                }
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "CONVERSATIONS ERROR:",
+                error
+            );
+        }
     }
 
-    .lesson-bar {
-        padding:
-            9px 12px;
+
+    /* =========================================================
+       CREATE CONVERSATION
+    ========================================================= */
+
+    async function ensureConversation(
+        title =
+            "محادثة جديدة"
+    ) {
+
+        if (
+            activeConversationId
+        ) {
+
+            return activeConversationId;
+        }
+
+
+        const cleanTitle =
+            String(
+                title || "محادثة جديدة"
+            )
+                .trim()
+                .slice(
+                    0,
+                    80
+                ) ||
+            "محادثة جديدة";
+
+
+        const data =
+            await api(
+                "/api/conversations",
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            title:
+                                cleanTitle
+                        })
+                }
+            );
+
+
+        activeConversationId =
+            Number(
+                data.conversation.id
+            );
+
+
+        await loadConversations();
+
+
+        return activeConversationId;
     }
 
-    .lesson-bar h2 {
-        font-size:
-            13px;
+
+    /* =========================================================
+       LOAD ONE CONVERSATION
+    ========================================================= */
+
+    async function loadConversation(
+        id
+    ) {
+
+        try {
+
+            const data =
+                await api(
+                    `/api/conversations/${id}`
+                );
+
+
+            activeConversationId =
+                Number(id);
+
+
+            conversationHistory =
+                [];
+
+
+            if (chat) {
+
+                chat.innerHTML =
+                    "";
+            }
+
+
+            const messages =
+                Array.isArray(
+                    data.messages
+                )
+                    ? data.messages
+                    : [];
+
+
+            messages.forEach(
+                message => {
+
+                    const type =
+                        message.role ===
+                        "assistant"
+
+                            ? "bot"
+
+                            : "user";
+
+
+                    addMessage(
+                        message.content,
+                        type,
+                        message.image ||
+                        null
+                    );
+
+
+                    conversationHistory.push({
+
+                        role:
+                            message.role,
+
+                        content:
+                            message.content
+                    });
+                }
+            );
+
+
+            await loadConversations();
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "LOAD CONVERSATION ERROR:",
+                error
+            );
+
+
+            addMessage(
+                error.message ||
+                "تعذر فتح المحادثة.",
+                "bot"
+            );
+        }
     }
 
-    .lesson-bar p {
-        font-size:
-            9px;
+
+    /* =========================================================
+       SAVE MESSAGE
+    ========================================================= */
+
+    async function saveMessage(
+        role,
+        content,
+        image = null
+    ) {
+
+        if (
+            !activeConversationId ||
+            !content
+        ) {
+
+            return;
+        }
+
+
+        try {
+
+            await api(
+                `/api/conversations/${activeConversationId}/messages`,
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            role,
+
+                            content,
+
+                            image
+                        })
+                }
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "SAVE MESSAGE ERROR:",
+                error
+            );
+        }
     }
 
-    .chat {
-        padding:
-            18px 10px 155px;
+
+    /* =========================================================
+       NEW CHAT
+    ========================================================= */
+
+    newChatButton?.addEventListener(
+        "click",
+        async () => {
+
+            activeConversationId =
+                null;
+
+
+            conversationHistory =
+                [];
+
+
+            pendingImage =
+                null;
+
+
+            renderImagePreview(
+                null
+            );
+
+
+            showWelcome();
+
+
+            await loadConversations();
+
+
+            if (
+                messageInput
+            ) {
+
+                messageInput.value =
+                    "";
+
+
+                resizeTextarea();
+
+
+                messageInput.focus();
+            }
+        }
+    );
+
+
+    /* =========================================================
+       IMAGE PREVIEW
+    ========================================================= */
+
+    function renderImagePreview(
+        dataUrl
+    ) {
+
+        if (
+            !imagePreview
+        ) {
+
+            return;
+        }
+
+
+        if (
+            !dataUrl
+        ) {
+
+            imagePreview.classList.add(
+                "hidden"
+            );
+
+
+            imagePreview.style.display =
+                "none";
+
+
+            if (
+                previewImage
+            ) {
+
+                previewImage.removeAttribute(
+                    "src"
+                );
+            }
+
+
+            return;
+        }
+
+
+        imagePreview.classList.remove(
+            "hidden"
+        );
+
+
+        imagePreview.style.display =
+            "flex";
+
+
+        if (
+            previewImage
+        ) {
+
+            previewImage.src =
+                dataUrl;
+        }
     }
 
-    .welcome {
-        margin:
-            28px auto;
+
+    /* =========================================================
+       FILE -> DATA URL
+    ========================================================= */
+
+    function readFileAsDataUrl(
+        file
+    ) {
+
+        return new Promise(
+            (
+                resolve,
+                reject
+            ) => {
+
+                const reader =
+                    new FileReader();
+
+
+                reader.onload =
+                    () =>
+                        resolve(
+                            reader.result
+                        );
+
+
+                reader.onerror =
+                    error =>
+                        reject(
+                            error
+                        );
+
+
+                reader.readAsDataURL(
+                    file
+                );
+            }
+        );
     }
 
-    .welcome-icon {
-        width:
-            58px;
 
-        height:
-            58px;
+    /* =========================================================
+       SET IMAGE
+    ========================================================= */
 
-        border-radius:
-            17px;
+    async function setPendingImage(
+        file
+    ) {
 
-        font-size:
-            23px;
+        if (
+            !file
+        ) {
+
+            return;
+        }
+
+
+        if (
+            !file.type ||
+            !file.type.startsWith(
+                "image/"
+            )
+        ) {
+
+            return;
+        }
+
+
+        try {
+
+            const dataUrl =
+                await readFileAsDataUrl(
+                    file
+                );
+
+
+            if (
+                typeof dataUrl !==
+                "string"
+            ) {
+
+                throw new Error(
+                    "تعذر قراءة الصورة."
+                );
+            }
+
+
+            /* -------------------------------------------------
+               حماية إضافية من الصور الضخمة
+            ------------------------------------------------- */
+
+            if (
+                dataUrl.length >
+                8_000_000
+            ) {
+
+                alert(
+                    "الصورة كبيرة جدًا. استخدم صورة أصغر."
+                );
+
+
+                return;
+            }
+
+
+            pendingImage =
+                dataUrl;
+
+
+            renderImagePreview(
+                dataUrl
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "IMAGE ERROR:",
+                error
+            );
+
+
+            alert(
+                "تعذر قراءة الصورة."
+            );
+        }
     }
 
-    .welcome h1 {
-        font-size:
-            26px;
+
+    /* =========================================================
+       UPLOAD IMAGE
+    ========================================================= */
+
+    uploadButton?.addEventListener(
+        "click",
+        () => {
+
+            imageInput?.click();
+        }
+    );
+
+
+    imageInput?.addEventListener(
+        "change",
+        async () => {
+
+            const file =
+                imageInput.files?.[0];
+
+
+            if (
+                file
+            ) {
+
+                await setPendingImage(
+                    file
+                );
+            }
+
+
+            imageInput.value =
+                "";
+        }
+    );
+
+
+    cameraInput?.addEventListener(
+        "change",
+        async () => {
+
+            const file =
+                cameraInput.files?.[0];
+
+
+            if (
+                file
+            ) {
+
+                await setPendingImage(
+                    file
+                );
+            }
+
+
+            cameraInput.value =
+                "";
+        }
+    );
+
+
+    /* =========================================================
+       REMOVE IMAGE
+    ========================================================= */
+
+    removeImageButton?.addEventListener(
+        "click",
+        () => {
+
+            pendingImage =
+                null;
+
+
+            renderImagePreview(
+                null
+            );
+        }
+    );
+
+
+    /* =========================================================
+       CAMERA - ERROR
+    ========================================================= */
+
+    function showCameraError(
+        message
+    ) {
+
+        if (
+            !cameraError
+        ) {
+
+            return;
+        }
+
+
+        cameraError.textContent =
+            message || "";
+
+
+        cameraError.style.display =
+            message
+                ? "block"
+                : "none";
     }
 
-    .welcome p {
-        font-size:
-            12px;
+
+    /* =========================================================
+       CAMERA - OPEN
+    ========================================================= */
+
+    async function openCamera() {
+
+        if (
+            !cameraModal
+        ) {
+
+            return;
+        }
+
+
+        showCameraError(
+            ""
+        );
+
+
+        cameraModal.classList.remove(
+            "hidden"
+        );
+
+
+        cameraModal.style.display =
+            "grid";
+
+
+        if (
+            !navigator.mediaDevices ||
+            !navigator.mediaDevices.getUserMedia
+        ) {
+
+            closeCamera();
+
+
+            cameraInput?.click();
+
+
+            return;
+        }
+
+
+        try {
+
+            cameraStream =
+                await navigator.mediaDevices.getUserMedia({
+
+                    video: {
+
+                        facingMode: {
+
+                            ideal:
+                                "environment"
+                        }
+                    },
+
+                    audio:
+                        false
+                });
+
+
+            if (
+                cameraVideo
+            ) {
+
+                cameraVideo.srcObject =
+                    cameraStream;
+
+
+                await cameraVideo
+                    .play()
+                    .catch(
+                        () => {}
+                    );
+            }
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "CAMERA ERROR:",
+                error
+            );
+
+
+            showCameraError(
+                "تعذر تشغيل الكاميرا. اسمح للمتصفح باستخدام الكاميرا أو استخدم رفع صورة."
+            );
+        }
     }
 
-    .message {
-        gap:
-            8px;
 
-        margin-bottom:
-            15px;
+    /* =========================================================
+       CAMERA - CLOSE
+    ========================================================= */
+
+    function closeCamera() {
+
+        if (
+            cameraStream
+        ) {
+
+            cameraStream
+                .getTracks()
+                .forEach(
+                    track =>
+                        track.stop()
+                );
+
+
+            cameraStream =
+                null;
+        }
+
+
+        if (
+            cameraVideo
+        ) {
+
+            cameraVideo.srcObject =
+                null;
+        }
+
+
+        if (
+            cameraModal
+        ) {
+
+            cameraModal.style.display =
+                "none";
+
+
+            cameraModal.classList.add(
+                "hidden"
+            );
+        }
     }
 
-    .message .avatar {
-        width:
-            29px;
 
-        height:
-            29px;
+    /* =========================================================
+       CAMERA EVENTS
+    ========================================================= */
 
-        flex-basis:
-            29px;
+    cameraButton?.addEventListener(
+        "click",
+        openCamera
+    );
 
-        border-radius:
-            9px;
 
-        font-size:
-            10px;
+    closeCameraButton?.addEventListener(
+        "click",
+        closeCamera
+    );
+
+
+    cameraModal?.addEventListener(
+        "click",
+        event => {
+
+            if (
+                event.target ===
+                cameraModal
+            ) {
+
+                closeCamera();
+            }
+        }
+    );
+
+
+    /* =========================================================
+       TAKE PHOTO
+    ========================================================= */
+
+    takePhotoButton?.addEventListener(
+        "click",
+        async () => {
+
+            if (
+                !cameraVideo ||
+                !cameraCanvas
+            ) {
+
+                return;
+            }
+
+
+            const width =
+                cameraVideo.videoWidth ||
+                1280;
+
+
+            const height =
+                cameraVideo.videoHeight ||
+                720;
+
+
+            cameraCanvas.width =
+                width;
+
+
+            cameraCanvas.height =
+                height;
+
+
+            const context =
+                cameraCanvas.getContext(
+                    "2d"
+                );
+
+
+            if (
+                !context
+            ) {
+
+                showCameraError(
+                    "تعذر تجهيز الصورة."
+                );
+
+
+                return;
+            }
+
+
+            context.drawImage(
+                cameraVideo,
+                0,
+                0,
+                width,
+                height
+            );
+
+
+            cameraCanvas.toBlob(
+                async blob => {
+
+                    if (
+                        !blob
+                    ) {
+
+                        showCameraError(
+                            "تعذر التقاط الصورة."
+                        );
+
+
+                        return;
+                    }
+
+
+                    const file =
+                        new File(
+                            [
+                                blob
+                            ],
+                            "physics-question.jpg",
+                            {
+                                type:
+                                    "image/jpeg"
+                            }
+                        );
+
+
+                    await setPendingImage(
+                        file
+                    );
+
+
+                    closeCamera();
+                },
+                "image/jpeg",
+                0.88
+            );
+        }
+    );
+
+
+    /* =========================================================
+       VOICE STATUS
+    ========================================================= */
+
+    function setVoiceStatus(
+        text
+    ) {
+
+        if (
+            !voiceStatus
+        ) {
+
+            return;
+        }
+
+
+        voiceStatus.textContent =
+            text || "";
+
+
+        voiceStatus.style.display =
+            text
+                ? "block"
+                : "none";
     }
 
-    .message .bubble {
-        max-width:
-            calc(100% - 37px);
 
-        font-size:
-            13px;
+    /* =========================================================
+       START VOICE RECORDING
+    ========================================================= */
 
-        line-height:
-            1.85;
+    async function startVoiceRecording() {
+
+        if (
+            !navigator.mediaDevices ||
+            !navigator.mediaDevices.getUserMedia
+        ) {
+
+            setVoiceStatus(
+                "التسجيل الصوتي غير مدعوم في هذا المتصفح."
+            );
+
+
+            return;
+        }
+
+
+        if (
+            !window.MediaRecorder
+        ) {
+
+            setVoiceStatus(
+                "التسجيل الصوتي غير مدعوم في هذا المتصفح."
+            );
+
+
+            return;
+        }
+
+
+        try {
+
+            const stream =
+                await navigator.mediaDevices.getUserMedia({
+
+                    audio:
+                        true
+                });
+
+
+            audioChunks =
+                [];
+
+
+            let options = {};
+
+
+            if (
+                MediaRecorder.isTypeSupported(
+                    "audio/webm"
+                )
+            ) {
+
+                options.mimeType =
+                    "audio/webm";
+
+            } else if (
+                MediaRecorder.isTypeSupported(
+                    "audio/ogg"
+                )
+            ) {
+
+                options.mimeType =
+                    "audio/ogg";
+            }
+
+
+            mediaRecorder =
+                new MediaRecorder(
+                    stream,
+                    options
+                );
+
+
+            mediaRecorder.addEventListener(
+                "dataavailable",
+                event => {
+
+                    if (
+                        event.data &&
+                        event.data.size >
+                        0
+                    ) {
+
+                        audioChunks.push(
+                            event.data
+                        );
+                    }
+                }
+            );
+
+
+            mediaRecorder.addEventListener(
+                "stop",
+                async () => {
+
+                    stream
+                        .getTracks()
+                        .forEach(
+                            track =>
+                                track.stop()
+                        );
+
+
+                    const mimeType =
+                        mediaRecorder.mimeType ||
+                        "audio/webm";
+
+
+                    const blob =
+                        new Blob(
+                            audioChunks,
+                            {
+                                type:
+                                    mimeType
+                            }
+                        );
+
+
+                    await transcribeAudio(
+                        blob
+                    );
+                }
+            );
+
+
+            mediaRecorder.start();
+
+
+            setVoiceStatus(
+                "جاري الاستماع... اضغط مرة ثانية للإيقاف"
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "VOICE START ERROR:",
+                error
+            );
+
+
+            setVoiceStatus(
+                "تعذر استخدام الميكروفون."
+            );
+        }
     }
 
-    .message.user .bubble {
-        padding:
-            9px 11px;
+
+    /* =========================================================
+       STOP VOICE RECORDING
+    ========================================================= */
+
+    function stopVoiceRecording() {
+
+        if (
+            mediaRecorder &&
+            mediaRecorder.state !==
+                "inactive"
+        ) {
+
+            setVoiceStatus(
+                "جاري تحويل التسجيل إلى نص..."
+            );
+
+
+            mediaRecorder.stop();
+        }
     }
 
-    .input-wrapper {
-        width:
-            calc(100% - 12px);
 
-        bottom:
-            6px;
+    /* =========================================================
+       TRANSCRIBE AUDIO
+    ========================================================= */
 
-        padding:
-            6px;
+    async function transcribeAudio(
+        blob
+    ) {
 
-        border-radius:
-            16px;
+        try {
+
+            if (
+                !blob ||
+                blob.size === 0
+            ) {
+
+                throw new Error(
+                    "التسجيل فارغ."
+                );
+            }
+
+
+            const formData =
+                new FormData();
+
+
+            const extension =
+                blob.type.includes(
+                    "ogg"
+                )
+
+                    ? "ogg"
+
+                    : "webm";
+
+
+            formData.append(
+                "audio",
+                blob,
+                `recording.${extension}`
+            );
+
+
+            const data =
+                await api(
+                    "/api/transcribe",
+                    {
+
+                        method:
+                            "POST",
+
+                        body:
+                            formData
+                    }
+                );
+
+
+            if (
+                messageInput &&
+                data.text
+            ) {
+
+                messageInput.value =
+                    data.text;
+
+
+                resizeTextarea();
+
+
+                messageInput.focus();
+            }
+
+
+            setVoiceStatus(
+                ""
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "TRANSCRIBE ERROR:",
+                error
+            );
+
+
+            setVoiceStatus(
+                error.message ||
+                "تعذر تحويل التسجيل إلى نص."
+            );
+        }
     }
 
-    .tool-button,
-    .send-button {
-        width:
-            39px;
 
-        height:
-            39px;
+    /* =========================================================
+       VOICE BUTTON
+    ========================================================= */
 
-        flex-basis:
-            39px;
+    voiceButton?.addEventListener(
+        "click",
+        () => {
 
-        border-radius:
-            10px;
+            if (
+                !mediaRecorder ||
+                mediaRecorder.state ===
+                    "inactive"
+            ) {
+
+                startVoiceRecording();
+
+            } else {
+
+                stopVoiceRecording();
+            }
+        }
+    );
+
+
+    /* =========================================================
+       SEND MESSAGE
+    ========================================================= */
+
+    async function sendMessage() {
+
+        if (
+            !messageInput ||
+            !sendButton
+        ) {
+
+            return;
+        }
+
+
+        if (
+            isSending
+        ) {
+
+            return;
+        }
+
+
+        const text =
+            messageInput.value.trim();
+
+
+        if (
+            !text &&
+            !pendingImage
+        ) {
+
+            return;
+        }
+
+
+        isSending =
+            true;
+
+
+        sendButton.disabled =
+            true;
+
+
+        const oldButtonText =
+            sendButton.textContent;
+
+
+        sendButton.textContent =
+            "...";
+
+
+        const imageToSend =
+            pendingImage;
+
+
+        /*
+            ناخد نسخة من التاريخ
+            قبل ما نضيف السؤال الحالي
+        */
+
+        const historyForRequest =
+            conversationHistory
+                .slice(
+                    -20
+                );
+
+
+        try {
+
+            /* ---------------------------------------------------
+               إنشاء محادثة لو مش موجودة
+            --------------------------------------------------- */
+
+            await ensureConversation(
+                text ||
+                "مسألة بصورة"
+            );
+
+
+            /* ---------------------------------------------------
+               عرض سؤال الطالب
+            --------------------------------------------------- */
+
+            addMessage(
+                text ||
+                "صورة مرفقة",
+                "user",
+                imageToSend
+            );
+
+
+            /* ---------------------------------------------------
+               حفظ سؤال الطالب
+            --------------------------------------------------- */
+
+            await saveMessage(
+                "user",
+                text ||
+                "صورة مرفقة",
+                imageToSend
+            );
+
+
+            /* ---------------------------------------------------
+               تنظيف input
+            --------------------------------------------------- */
+
+            messageInput.value =
+                "";
+
+
+            resizeTextarea();
+
+
+            /* ---------------------------------------------------
+               حذف الصورة المعلقة من الواجهة
+            --------------------------------------------------- */
+
+            pendingImage =
+                null;
+
+
+            renderImagePreview(
+                null
+            );
+
+
+            /* ---------------------------------------------------
+               طلب الذكاء الاصطناعي
+            --------------------------------------------------- */
+
+            const data =
+                await api(
+                    "/api/chat",
+                    {
+
+                        method:
+                            "POST",
+
+                        headers: {
+
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+
+                                message:
+                                    text ||
+                                    "حل المسألة الموجودة في الصورة.",
+
+                                history:
+                                    historyForRequest,
+
+                                grade:
+                                    sessionContext.grade,
+
+                                subject:
+                                    sessionContext.subject,
+
+                                unit:
+                                    sessionContext.unit,
+
+                                lesson:
+                                    sessionContext.lesson,
+
+                                mode:
+                                    sessionContext.mode,
+
+                                image:
+                                    imageToSend
+                            })
+                    }
+                );
+
+
+            /* ---------------------------------------------------
+               الإجابة
+            --------------------------------------------------- */
+
+            const answer =
+                String(
+                    data.answer ||
+                    ""
+                ).trim();
+
+
+            if (
+                !answer
+            ) {
+
+                throw new Error(
+                    "المدرس الذكي لم يرجع إجابة."
+                );
+            }
+
+
+            /* ---------------------------------------------------
+               عرض الإجابة
+            --------------------------------------------------- */
+
+            addMessage(
+                answer,
+                "bot"
+            );
+
+
+            /* ---------------------------------------------------
+               حفظ إجابة AI
+            --------------------------------------------------- */
+
+            await saveMessage(
+                "assistant",
+                answer,
+                null
+            );
+
+
+            /* ---------------------------------------------------
+               تحديث تاريخ المحادثة
+            --------------------------------------------------- */
+
+            conversationHistory.push({
+
+                role:
+                    "user",
+
+                content:
+                    text ||
+                    "صورة مرفقة"
+            });
+
+
+            conversationHistory.push({
+
+                role:
+                    "assistant",
+
+                content:
+                    answer
+            });
+
+
+            /* ---------------------------------------------------
+               الاحتفاظ بآخر 20 رسالة فقط
+            --------------------------------------------------- */
+
+            if (
+                conversationHistory.length >
+                20
+            ) {
+
+                conversationHistory =
+                    conversationHistory.slice(
+                        -20
+                    );
+            }
+
+
+            /* ---------------------------------------------------
+               تحديث قائمة المحادثات
+            --------------------------------------------------- */
+
+            await loadConversations();
+
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "CHAT ERROR:",
+                error
+            );
+
+
+            addMessage(
+                error.message ||
+                "تعذر الاتصال بالمدرس الذكي حاليًا.",
+                "bot"
+            );
+
+        } finally {
+
+            isSending =
+                false;
+
+
+            sendButton.disabled =
+                false;
+
+
+            sendButton.textContent =
+                oldButtonText ||
+                "إرسال";
+
+
+            messageInput.focus();
+        }
     }
 
-    #messageInput {
-        font-size:
-            13px;
 
-        min-height:
-            39px;
+    /* =========================================================
+       SEND BUTTON
+    ========================================================= */
 
-        padding:
-            9px 7px;
+    sendButton?.addEventListener(
+        "click",
+        sendMessage
+    );
+
+
+    /* =========================================================
+       ENTER TO SEND
+    ========================================================= */
+
+    messageInput?.addEventListener(
+        "keydown",
+        event => {
+
+            if (
+                event.key ===
+                    "Enter" &&
+                !event.shiftKey
+            ) {
+
+                event.preventDefault();
+
+
+                sendMessage();
+            }
+        }
+    );
+
+
+    /* =========================================================
+       TEXTAREA AUTO RESIZE
+    ========================================================= */
+
+    messageInput?.addEventListener(
+        "input",
+        resizeTextarea
+    );
+
+
+    /* =========================================================
+       INITIALIZATION
+    ========================================================= */
+
+    async function init() {
+
+        /* -----------------------------------------------------
+           عرض بيانات الدرس
+        ----------------------------------------------------- */
+
+        renderSessionContext();
+
+
+        /* -----------------------------------------------------
+           تجهيز input
+        ----------------------------------------------------- */
+
+        resizeTextarea();
+
+
+        /* -----------------------------------------------------
+           الصفحة الترحيبية
+        ----------------------------------------------------- */
+
+        showWelcome();
+
+
+        /* -----------------------------------------------------
+           التأكد من تسجيل الدخول
+        ----------------------------------------------------- */
+
+        const loggedIn =
+            await loadCurrentUser();
+
+
+        if (
+            !loggedIn
+        ) {
+
+            return;
+        }
+
+
+        /* -----------------------------------------------------
+           المحادثات
+        ----------------------------------------------------- */
+
+        await loadConversations();
+
+
+        /* -----------------------------------------------------
+           فتح محادثة من الرابط
+           مثال:
+           /chat.html?conversation=5
+        ----------------------------------------------------- */
+
+        const requestedConversation =
+            params.get(
+                "conversation"
+            );
+
+
+        if (
+            requestedConversation &&
+            /^\d+$/.test(
+                requestedConversation
+            )
+        ) {
+
+            await loadConversation(
+                Number(
+                    requestedConversation
+                )
+            );
+        }
     }
 
-    .input-hint {
-        display:
-            none;
-    }
 
-    .voice-status {
-        width:
-            calc(100% - 15px);
+    /* =========================================================
+       START
+    ========================================================= */
 
-        font-size:
-            9px;
-    }
+    init();
 
-    .image-preview {
-        width:
-            calc(100% - 12px);
-
-        bottom:
-            89px;
-    }
-}
-
-
-/* =========================================================
-   SMALL PHONES
-========================================================= */
-
-@media (max-width: 500px) {
-
-    .chat-brand span {
-        display:
-            none;
-    }
-
-    .chat-brand strong {
-        font-size:
-            14px;
-    }
-
-    .chat-logo {
-        width:
-            37px;
-
-        height:
-            37px;
-
-        border-radius:
-            11px;
-    }
-
-    .top-actions {
-        gap:
-            4px;
-    }
-
-    .logout-button {
-        min-height:
-            34px;
-
-        padding:
-            0 9px;
-
-        font-size:
-            10px;
-    }
-
-    .lesson-bar {
-        padding:
-            8px 10px;
-    }
-
-    .lesson-bar p {
-        display:
-            none;
-    }
-
-    .chat {
-        padding:
-            16px 8px 148px;
-    }
-
-    .welcome {
-        margin:
-            24px auto;
-    }
-
-    .welcome h1 {
-        font-size:
-            24px;
-    }
-
-    .welcome p {
-        font-size:
-            11px;
-
-        padding:
-            0 8px;
-    }
-
-    .message .bubble {
-        font-size:
-            12.5px;
-    }
-
-    .tools {
-        gap:
-            2px;
-    }
-
-    .tool-button,
-    .send-button {
-        width:
-            37px;
-
-        height:
-            37px;
-
-        flex-basis:
-            37px;
-
-        font-size:
-            15px;
-    }
-
-    #messageInput {
-        font-size:
-            12.5px;
-    }
-}
-
-
-/* =========================================================
-   VERY SMALL PHONES
-========================================================= */
-
-@media (max-width: 370px) {
-
-    .tool-button,
-    .send-button {
-        width:
-            35px;
-
-        height:
-            35px;
-
-        flex-basis:
-            35px;
-    }
-
-    .chat {
-        padding-left:
-            6px;
-
-        padding-right:
-            6px;
-    }
-}
-
-
-/* =========================================================
-   ACCESSIBILITY
-========================================================= */
-
-button:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
-a:focus-visible {
-    outline:
-        2px solid var(--accent);
-
-    outline-offset:
-        2px;
-}
+})();
