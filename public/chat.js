@@ -1,868 +1,1522 @@
-"use strict";
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
 
-document.addEventListener("DOMContentLoaded", () => {
+<head>
+    <meta charset="UTF-8">
 
-    /* =========================================================
-       ELEMENTS
-    ========================================================= */
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    >
 
-    const messageInput =
-        document.getElementById("messageInput");
+    <meta
+        name="theme-color"
+        content="#0b0d12"
+    >
 
-    const sendButton =
-        document.getElementById("sendButton");
+    <title>Physics AI</title>
 
-    const chat =
-        document.getElementById("chat");
+    <style>
+        /* =========================================================
+           ROOT
+        ========================================================= */
 
-    const sidebar =
-        document.getElementById("sidebar");
+        :root {
+            --bg: #0b0d12;
+            --bg-soft: #10141b;
 
-    const sidebarButton =
-        document.getElementById("sidebarButton");
+            --sidebar: #11151c;
+            --panel: #161b24;
+            --panel-2: #1c222c;
 
-    const themeButton =
-        document.getElementById("themeButton");
+            --border: rgba(255, 255, 255, 0.08);
 
-    const newChatButton =
-        document.getElementById("newChatButton");
+            --text: #f5f7fb;
+            --muted: #929cab;
 
-    const conversationList =
-        document.getElementById("conversationList");
+            --accent: #7658ff;
+            --accent-hover: #6547ee;
 
-    const logoutButton =
-        document.getElementById("logoutButton");
+            --user: #292f3b;
 
-    const userName =
-        document.getElementById("userName");
+            --danger: #ff5667;
+            --success: #53d69b;
 
-    const gradeSelect =
-        document.getElementById("grade");
-
-    const subjectSelect =
-        document.getElementById("subject");
-
-    const unitSelect =
-        document.getElementById("unit");
-
-    const lessonSelect =
-        document.getElementById("lesson");
-
-    const uploadButton =
-        document.getElementById("uploadButton");
-
-    const cameraButton =
-        document.getElementById("cameraButton");
-
-    const voiceButton =
-        document.getElementById("voiceButton");
-
-    const imageInput =
-        document.getElementById("imageInput");
-
-    const cameraInput =
-        document.getElementById("cameraInput");
-
-    const imagePreview =
-        document.getElementById("imagePreview");
-
-    const previewImage =
-        document.getElementById("previewImage");
-
-    const removeImageButton =
-        document.getElementById("removeImageButton");
-
-    const voiceStatus =
-        document.getElementById("voiceStatus");
-
-    const cameraModal =
-        document.getElementById("cameraModal");
-
-    const cameraVideo =
-        document.getElementById("cameraVideo");
-
-    const cameraCanvas =
-        document.getElementById("cameraCanvas");
-
-    const closeCameraButton =
-        document.getElementById("closeCameraButton");
-
-    const takePhotoButton =
-        document.getElementById("takePhotoButton");
-
-    const cameraError =
-        document.getElementById("cameraError");
-
-    const lessonName =
-        document.getElementById("lessonName");
-
-    const lessonDescription =
-        document.getElementById("lessonDescription");
-
-
-    /* =========================================================
-       REQUIRED ELEMENTS
-    ========================================================= */
-
-    if (
-        !messageInput ||
-        !sendButton ||
-        !chat
-    ) {
-        console.error(
-            "Physics AI: العناصر الأساسية للشات غير موجودة."
-        );
-
-        return;
-    }
-
-
-    /* =========================================================
-       STATE
-    ========================================================= */
-
-    let currentUser = null;
-
-    let currentConversationId = null;
-
-    let conversationHistory = [];
-
-    let selectedImage = null;
-
-    let cameraStream = null;
-
-    let mediaRecorder = null;
-
-    let recordingStream = null;
-
-    let recordedChunks = [];
-
-    let isRecording = false;
-
-    let isSending = false;
-
-
-    /* =========================================================
-       CURRICULUM
-    ========================================================= */
-
-    const curriculum = {
-
-        "الصف الثالث الثانوي العام": {
-
-            units: [
-
-                {
-                    title:
-                        "الوحدة الأولى: الكهربية التيارية والكهرومغناطيسية",
-
-                    lessons: [
-                        "التيار الكهربي وشدة التيار",
-                        "فرق الجهد والقوة الدافعة الكهربية",
-                        "المقاومة الكهربية",
-                        "المقاومة النوعية والتوصيلية",
-                        "توصيل المقاومات على التوالي",
-                        "توصيل المقاومات على التوازي",
-                        "قانون أوم",
-                        "قانون أوم للدائرة المغلقة",
-                        "قانون كيرتشوف الأول",
-                        "قانون كيرتشوف الثاني",
-                        "التأثير المغناطيسي للتيار الكهربي",
-                        "الحث الكهرومغناطيسي",
-                        "دوائر التيار المتردد"
-                    ]
-                },
-
-                {
-                    title:
-                        "الوحدة الثانية: مقدمة في الفيزياء الحديثة",
-
-                    lessons: [
-                        "ازدواجية الموجة والجسيم",
-                        "الأطياف الذرية",
-                        "الليزر",
-                        "الإلكترونيات الحديثة"
-                    ]
-                }
-            ]
-        },
-
-        "الصف الثاني بكالوريا": {
-
-            units: [
-
-                {
-                    title:
-                        "المحتوى الرسمي قيد الإضافة",
-
-                    lessons: [
-                        "سيتم إضافة المنهج الرسمي"
-                    ]
-                }
-            ]
-        }
-    };
-
-
-    /* =========================================================
-       THEME
-    ========================================================= */
-
-    function getTheme() {
-
-        return (
-            localStorage.getItem(
-                "physicsai-theme"
-            ) || "dark"
-        );
-    }
-
-
-    function applyTheme(theme) {
-
-        const isLight =
-            theme === "light";
-
-        document.body.classList.toggle(
-            "light",
-            isLight
-        );
-
-        if (themeButton) {
-
-            themeButton.textContent =
-                isLight
-                    ? "☾"
-                    : "☀";
-
-            themeButton.title =
-                isLight
-                    ? "الوضع الليلي"
-                    : "الوضع النهاري";
+            --shadow:
+                0 20px 60px rgba(0, 0, 0, 0.35);
         }
 
-        const metaTheme =
-            document.querySelector(
-                'meta[name="theme-color"]'
-            );
+        body.light {
+            --bg: #f5f7fb;
+            --bg-soft: #eef1f6;
 
-        if (metaTheme) {
+            --sidebar: #ffffff;
+            --panel: #ffffff;
+            --panel-2: #eef1f6;
 
-            metaTheme.setAttribute(
-                "content",
+            --border: rgba(15, 23, 42, 0.08);
 
-                isLight
-                    ? "#f7f8fb"
-                    : "#0b0e13"
-            );
+            --text: #18202a;
+            --muted: #667085;
+
+            --accent: #6847ff;
+            --accent-hover: #5737e8;
+
+            --user: #ece8ff;
+
+            --shadow:
+                0 20px 60px rgba(15, 23, 42, 0.10);
         }
-    }
 
+        /* =========================================================
+           RESET
+        ========================================================= */
 
-    applyTheme(
-        getTheme()
-    );
-
-
-    themeButton?.addEventListener(
-        "click",
-        () => {
-
-            const current =
-                getTheme();
-
-            const next =
-                current === "light"
-                    ? "dark"
-                    : "light";
-
-            localStorage.setItem(
-                "physicsai-theme",
-                next
-            );
-
-            applyTheme(
-                next
-            );
+        * {
+            box-sizing: border-box;
         }
-    );
 
-
-    /* =========================================================
-       SIDEBAR
-    ========================================================= */
-
-    function isMobile() {
-
-        return (
-            window.innerWidth <= 900
-        );
-    }
-
-
-    function closeMobileSidebar() {
-
-        sidebar?.classList.remove(
-            "mobile-open"
-        );
-
-        document
-            .getElementById("mobileOverlay")
-            ?.classList.remove("show");
-    }
-
-
-    function openMobileSidebar() {
-
-        sidebar?.classList.add(
-            "mobile-open"
-        );
-
-        document
-            .getElementById("mobileOverlay")
-            ?.classList.add("show");
-    }
-
-
-    sidebarButton?.addEventListener(
-        "click",
-        () => {
-
-            if (!sidebar) {
-                return;
-            }
-
-            if (isMobile()) {
-
-                const opened =
-                    sidebar.classList.toggle(
-                        "mobile-open"
-                    );
-
-                document
-                    .getElementById(
-                        "mobileOverlay"
-                    )
-                    ?.classList.toggle(
-                        "show",
-                        opened
-                    );
-
-            } else {
-
-                sidebar.classList.toggle(
-                    "collapsed"
-                );
-            }
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
         }
-    );
 
+        body {
+            font-family:
+                "Segoe UI",
+                Tahoma,
+                Arial,
+                sans-serif;
 
-    document
-        .getElementById("mobileOverlay")
-        ?.addEventListener(
-            "click",
-            closeMobileSidebar
-        );
+            background: var(--bg);
+            color: var(--text);
 
+            overflow: hidden;
+        }
 
-    window.addEventListener(
-        "resize",
-        () => {
+        button,
+        textarea,
+        input,
+        select {
+            font: inherit;
+        }
 
-            if (!isMobile()) {
+        button {
+            border: 0;
+            outline: none;
+            cursor: pointer;
+        }
 
-                sidebar?.classList.remove(
-                    "mobile-open"
+        a {
+            color: inherit;
+        }
+
+        /* =========================================================
+           APP
+        ========================================================= */
+
+        .app {
+            width: 100%;
+            height: 100dvh;
+
+            display: flex;
+
+            background: var(--bg);
+        }
+
+        /* =========================================================
+           SIDEBAR
+        ========================================================= */
+
+        .sidebar {
+            width: 290px;
+            min-width: 290px;
+            height: 100dvh;
+
+            display: flex;
+            flex-direction: column;
+
+            background: var(--sidebar);
+
+            border-left: 1px solid var(--border);
+
+            transition:
+                width 0.25s ease,
+                min-width 0.25s ease,
+                transform 0.25s ease;
+
+            position: relative;
+            z-index: 100;
+        }
+
+        .sidebar.collapsed {
+            width: 0;
+            min-width: 0;
+            overflow: hidden;
+            border-left: 0;
+        }
+
+        .sidebar-header {
+            padding: 18px 15px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-logo {
+            width: 44px;
+            height: 44px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 14px;
+
+            color: #ffffff;
+            font-size: 21px;
+            font-weight: 900;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    var(--accent),
+                    #a48dff
                 );
 
-                document
-                    .getElementById(
-                        "mobileOverlay"
-                    )
-                    ?.classList.remove(
-                        "show"
-                    );
-            }
-        }
-    );
-
-
-    /* =========================================================
-       TEXTAREA
-    ========================================================= */
-
-    function resizeInput() {
-
-        messageInput.style.height =
-            "auto";
-
-        messageInput.style.height =
-            Math.min(
-                messageInput.scrollHeight,
-                160
-            ) + "px";
-    }
-
-
-    messageInput.addEventListener(
-        "input",
-        resizeInput
-    );
-
-
-    messageInput.addEventListener(
-        "keydown",
-        event => {
-
-            if (
-                event.key === "Enter" &&
-                !event.shiftKey
-            ) {
-
-                event.preventDefault();
-
-                sendMessage();
-            }
-        }
-    );
-
-
-    /* =========================================================
-       SEND BUTTON
-       الإصلاح الأساسي
-    ========================================================= */
-
-    sendButton.addEventListener(
-        "click",
-        () => {
-
-            sendMessage();
-        }
-    );
-
-
-    /* =========================================================
-       CURRENT USER
-    ========================================================= */
-
-    async function loadUser() {
-
-        const response =
-            await fetch(
-                "/api/auth/me",
-                {
-                    credentials:
-                        "include"
-                }
-            );
-
-        let data;
-
-        try {
-
-            data =
-                await response.json();
-
-        } catch {
-
-            throw new Error(
-                "تعذر قراءة بيانات الحساب."
-            );
+            box-shadow:
+                0 12px 30px rgba(118, 88, 255, 0.25);
         }
 
-        if (!response.ok) {
-
-            throw new Error(
-                data.error ||
-                "تعذر التحقق من الحساب."
-            );
+        .brand-title {
+            font-size: 15px;
+            font-weight: 800;
         }
 
-        if (!data.loggedIn) {
-
-            window.location.href =
-                "/login.html";
-
-            return false;
+        .brand-subtitle {
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 11px;
         }
 
-        currentUser =
-            data.user;
+        .new-chat {
+            width: 100%;
+            height: 44px;
 
-        if (userName) {
+            margin-top: 15px;
 
-            userName.textContent =
-                currentUser.name ||
-                "";
+            border-radius: 12px;
+
+            background: var(--accent);
+            color: #ffffff;
+
+            font-size: 13px;
+            font-weight: 800;
+
+            transition:
+                transform 0.2s ease,
+                background 0.2s ease;
         }
 
-        return true;
-    }
-
-
-    /* =========================================================
-       CONVERSATIONS
-    ========================================================= */
-
-    async function loadConversations() {
-
-        if (!conversationList) {
-            return;
+        .new-chat:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
         }
 
-        try {
+        .sidebar-title {
+            padding: 14px 15px 8px;
 
-            const response =
-                await fetch(
-                    "/api/conversations",
-                    {
-                        credentials:
-                            "include"
-                    }
+            color: var(--muted);
+
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .conversation-list {
+            flex: 1;
+
+            overflow-y: auto;
+
+            padding:
+                0 10px 14px;
+        }
+
+        .conversation-list::-webkit-scrollbar,
+        .chat::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .conversation-list::-webkit-scrollbar-thumb,
+        .chat::-webkit-scrollbar-thumb {
+            background: rgba(127, 127, 127, 0.25);
+            border-radius: 20px;
+        }
+
+        .conversation-item {
+            width: 100%;
+
+            display: block;
+
+            padding: 11px 12px;
+            margin-bottom: 4px;
+
+            text-align: right;
+
+            border-radius: 11px;
+
+            background: transparent;
+            color: var(--text);
+
+            transition: background 0.15s ease;
+        }
+
+        .conversation-item:hover,
+        .conversation-item.active {
+            background: var(--panel-2);
+        }
+
+        .conversation-item-title {
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .conversation-item-date {
+            margin-top: 4px;
+
+            color: var(--muted);
+
+            font-size: 10px;
+        }
+
+        .study-link {
+            display: block;
+
+            margin:
+                0 12px 14px;
+
+            padding: 12px;
+
+            border:
+                1px solid var(--border);
+
+            border-radius: 11px;
+
+            background: var(--panel);
+
+            color: var(--text);
+
+            text-decoration: none;
+
+            font-size: 12px;
+            font-weight: 700;
+
+            transition:
+                background 0.15s ease;
+        }
+
+        .study-link:hover {
+            background: var(--panel-2);
+        }
+
+        /* =========================================================
+           MAIN
+        ========================================================= */
+
+        .main {
+            position: relative;
+
+            flex: 1;
+
+            min-width: 0;
+            height: 100dvh;
+
+            display: flex;
+            flex-direction: column;
+
+            background: var(--bg);
+        }
+
+        /* =========================================================
+           TOPBAR
+        ========================================================= */
+
+        .topbar {
+            height: 62px;
+            min-height: 62px;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            padding: 0 13px;
+
+            border-bottom:
+                1px solid var(--border);
+
+            background:
+                rgba(22, 27, 36, 0.75);
+
+            backdrop-filter: blur(18px);
+
+            position: relative;
+            z-index: 20;
+        }
+
+        body.light .topbar {
+            background:
+                rgba(255, 255, 255, 0.80);
+        }
+
+        .topbar-left,
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+
+            min-width: 0;
+        }
+
+        .icon-button {
+            width: 40px;
+            height: 40px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 11px;
+
+            background: transparent;
+
+            color: var(--text);
+
+            font-size: 18px;
+
+            transition:
+                background 0.15s ease;
+        }
+
+        .icon-button:hover {
+            background: var(--panel-2);
+        }
+
+        .page-info {
+            min-width: 0;
+        }
+
+        .page-title {
+            max-width: 45vw;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+
+            font-size: 14px;
+            font-weight: 800;
+        }
+
+        .online {
+            margin-top: 2px;
+
+            color: var(--success);
+
+            font-size: 10px;
+        }
+
+        #userName {
+            max-width: 150px;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+
+            color: var(--muted);
+
+            font-size: 11px;
+        }
+
+        /* =========================================================
+           LESSON BAR
+        ========================================================= */
+
+        .lesson-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 15px;
+
+            padding: 11px 16px;
+
+            border-bottom:
+                1px solid var(--border);
+
+            background: var(--bg-soft);
+        }
+
+        .lesson-main {
+            min-width: 0;
+        }
+
+        .lesson-badge {
+            display: inline-flex;
+            align-items: center;
+
+            gap: 6px;
+
+            padding: 5px 9px;
+
+            border-radius: 999px;
+
+            background:
+                rgba(118, 88, 255, 0.12);
+
+            color: var(--accent);
+
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        #lessonName {
+            margin: 5px 0 2px;
+
+            font-size: 16px;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+        }
+
+        #lessonDescription {
+            margin: 0;
+
+            color: var(--muted);
+
+            font-size: 11px;
+
+            overflow: hidden;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+        }
+
+        /* =========================================================
+           CHAT
+        ========================================================= */
+
+        .chat-wrapper {
+            position: relative;
+
+            flex: 1;
+
+            min-height: 0;
+        }
+
+        .chat {
+            width: 100%;
+            height: 100%;
+
+            overflow-y: auto;
+
+            padding:
+                26px 16px 170px;
+        }
+
+        /* =========================================================
+           WELCOME
+        ========================================================= */
+
+        .welcome {
+            width: min(720px, 100%);
+
+            margin: 55px auto;
+
+            text-align: center;
+        }
+
+        .welcome-icon {
+            width: 70px;
+            height: 70px;
+
+            margin:
+                0 auto 18px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 21px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    var(--accent),
+                    #a48dff
                 );
 
-            const data =
-                await response.json();
+            color: #ffffff;
 
-            if (!response.ok) {
+            font-size: 30px;
 
-                throw new Error(
-                    data.error ||
-                    "تعذر تحميل المحادثات."
+            box-shadow:
+                0 16px 40px
+                rgba(118, 88, 255, 0.23);
+        }
+
+        .welcome h1 {
+            margin: 0;
+
+            font-size:
+                clamp(25px, 5vw, 37px);
+
+            line-height: 1.2;
+        }
+
+        .welcome p {
+            width: min(600px, 100%);
+
+            margin:
+                12px auto 0;
+
+            color: var(--muted);
+
+            font-size: 13px;
+
+            line-height: 1.9;
+        }
+
+        /* =========================================================
+           MESSAGES
+        ========================================================= */
+
+        .message {
+            width: min(900px, 100%);
+
+            display: flex;
+            align-items: flex-start;
+
+            gap: 10px;
+
+            margin:
+                0 auto 18px;
+        }
+
+        .avatar {
+            width: 34px;
+            height: 34px;
+
+            flex:
+                0 0 34px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 10px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    var(--accent),
+                    #a48dff
                 );
+
+            color: #ffffff;
+
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .message.user .avatar {
+            background: #667085;
+        }
+
+        .bubble {
+            min-width: 0;
+
+            max-width:
+                min(82%, 760px);
+
+            padding: 3px 0;
+
+            color: var(--text);
+
+            font-size: 14px;
+
+            line-height: 1.9;
+
+            overflow-wrap: anywhere;
+        }
+
+        .message.user .bubble {
+            padding:
+                11px 14px;
+
+            background: var(--user);
+
+            border-radius:
+                16px 6px 16px 16px;
+        }
+
+        .bubble strong {
+            display: block;
+
+            margin-bottom: 4px;
+
+            color: var(--muted);
+
+            font-size: 10px;
+        }
+
+        .bubble p {
+            margin: 0;
+
+            white-space: pre-wrap;
+        }
+
+        .bubble img {
+            display: block;
+
+            width: min(380px, 100%);
+
+            max-height: 320px;
+
+            margin-top: 12px;
+
+            object-fit: cover;
+
+            border-radius: 13px;
+
+            border:
+                1px solid var(--border);
+
+            box-shadow: var(--shadow);
+        }
+
+        /* =========================================================
+           IMAGE PREVIEW
+        ========================================================= */
+
+        .image-preview {
+            position: absolute;
+
+            right: 0;
+            left: 0;
+            bottom: 102px;
+
+            width:
+                min(900px, calc(100% - 24px));
+
+            margin: 0 auto;
+
+            z-index: 11;
+        }
+
+        .image-preview.hidden {
+            display: none;
+        }
+
+        .image-preview img {
+            width: 92px;
+            height: 72px;
+
+            display: block;
+
+            object-fit: cover;
+
+            border-radius: 11px;
+
+            border:
+                1px solid var(--border);
+
+            box-shadow: var(--shadow);
+        }
+
+        #removeImageButton {
+            position: absolute;
+
+            top: -7px;
+            right: 70px;
+
+            width: 22px;
+            height: 22px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 50%;
+
+            background: var(--danger);
+
+            color: #ffffff;
+
+            font-size: 15px;
+            line-height: 1;
+        }
+
+        /* =========================================================
+           COMPOSER
+        ========================================================= */
+
+        .composer-area {
+            position: absolute;
+
+            right: 0;
+            left: 0;
+            bottom: 0;
+
+            padding:
+                12px 12px
+                calc(12px + env(safe-area-inset-bottom));
+
+            background:
+                linear-gradient(
+                    to bottom,
+                    transparent,
+                    var(--bg) 35%
+                );
+
+            z-index: 10;
+        }
+
+        .input-wrapper {
+            width:
+                min(900px, 100%);
+
+            min-height: 56px;
+
+            margin: 0 auto;
+
+            display: flex;
+            align-items: flex-end;
+
+            gap: 7px;
+
+            padding: 7px;
+
+            border:
+                1px solid var(--border);
+
+            border-radius: 18px;
+
+            background:
+                var(--panel);
+
+            box-shadow:
+                var(--shadow);
+        }
+
+        .tools {
+            display: flex;
+            align-items: center;
+
+            gap: 5px;
+        }
+
+        .tool-button,
+        .send-button {
+            width: 42px;
+            height: 42px;
+
+            flex:
+                0 0 42px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 12px;
+
+            background:
+                var(--panel-2);
+
+            color: var(--text);
+
+            font-size: 17px;
+
+            transition:
+                transform 0.15s ease,
+                background 0.15s ease;
+        }
+
+        .tool-button:hover {
+            transform: translateY(-1px);
+        }
+
+        .send-button {
+            background: var(--accent);
+
+            color: #ffffff;
+
+            font-size: 20px;
+        }
+
+        .send-button:hover {
+            background: var(--accent-hover);
+        }
+
+        .send-button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        #messageInput {
+            flex: 1;
+
+            min-width: 0;
+            min-height: 42px;
+            max-height: 150px;
+
+            resize: none;
+
+            border: 0;
+            outline: none;
+
+            background: transparent;
+
+            color: var(--text);
+
+            padding:
+                10px 9px;
+
+            line-height: 1.6;
+
+            font-size: 14px;
+        }
+
+        #messageInput::placeholder {
+            color: var(--muted);
+        }
+
+        .input-hint {
+            width:
+                min(900px, 100%);
+
+            margin:
+                5px auto 0;
+
+            text-align: center;
+
+            color: var(--muted);
+
+            font-size: 9px;
+        }
+
+        .voice-status {
+            width:
+                min(900px, 100%);
+
+            margin:
+                3px auto 0;
+
+            min-height: 14px;
+
+            text-align: center;
+
+            color: var(--accent);
+
+            font-size: 10px;
+        }
+
+        /* =========================================================
+           CAMERA MODAL
+        ========================================================= */
+
+        .modal {
+            position: fixed;
+
+            inset: 0;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 20px;
+
+            background:
+                rgba(0, 0, 0, 0.65);
+
+            z-index: 300;
+        }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        .modal-card {
+            width:
+                min(600px, 100%);
+
+            padding: 16px;
+
+            border:
+                1px solid var(--border);
+
+            border-radius: 18px;
+
+            background:
+                var(--panel);
+
+            box-shadow:
+                var(--shadow);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 12px;
+
+            margin-bottom: 12px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+
+            font-size: 15px;
+        }
+
+        #closeCameraButton {
+            width: 36px;
+            height: 36px;
+
+            display: grid;
+            place-items: center;
+
+            border-radius: 50%;
+
+            background: var(--panel-2);
+
+            color: var(--text);
+
+            font-size: 20px;
+        }
+
+        #cameraVideo {
+            width: 100%;
+
+            max-height: 60vh;
+
+            display: block;
+
+            object-fit: cover;
+
+            background: #000;
+
+            border-radius: 14px;
+        }
+
+        #cameraCanvas {
+            display: none;
+        }
+
+        .capture-button {
+            width: 100%;
+
+            margin-top: 12px;
+
+            padding: 13px;
+
+            border-radius: 12px;
+
+            background: var(--accent);
+
+            color: #fff;
+
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        #cameraError {
+            min-height: 18px;
+
+            margin:
+                8px 0 0;
+
+            text-align: center;
+
+            color: var(--danger);
+
+            font-size: 11px;
+        }
+
+        /* =========================================================
+           MOBILE OVERLAY
+        ========================================================= */
+
+        .mobile-overlay {
+            display: none;
+
+            position: fixed;
+
+            inset: 0;
+
+            background:
+                rgba(0, 0, 0, 0.55);
+
+            z-index: 90;
+        }
+
+        .mobile-overlay.show {
+            display: block;
+        }
+
+        /* =========================================================
+           MOBILE
+        ========================================================= */
+
+        @media (max-width: 900px) {
+
+            .sidebar {
+                position: fixed;
+
+                top: 0;
+                right: 0;
+                bottom: 0;
+
+                width: min(88vw, 320px);
+                min-width: min(88vw, 320px);
+
+                transform:
+                    translateX(105%);
+
+                box-shadow:
+                    -18px 0 45px
+                    rgba(0, 0, 0, 0.30);
             }
 
-            conversationList.innerHTML =
-                "";
-
-            const conversations =
-                Array.isArray(
-                    data.conversations
-                )
-                    ? data.conversations
-                    : [];
-
-            conversations.forEach(
-                conversation => {
-
-                    const button =
-                        document.createElement(
-                            "button"
-                        );
-
-                    button.type =
-                        "button";
-
-                    button.className =
-                        "conversation-item";
-
-                    button.dataset.id =
-                        conversation.id;
-
-                    const title =
-                        document.createElement(
-                            "div"
-                        );
-
-                    title.className =
-                        "conversation-item-title";
-
-                    title.textContent =
-                        conversation.title ||
-                        "محادثة جديدة";
-
-                    const date =
-                        document.createElement(
-                            "div"
-                        );
-
-                    date.className =
-                        "conversation-item-date";
-
-                    date.textContent =
-                        formatDate(
-                            conversation.updated_at
-                        );
-
-                    button.appendChild(
-                        title
-                    );
-
-                    button.appendChild(
-                        date
-                    );
-
-                    button.addEventListener(
-                        "click",
-                        async () => {
-
-                            await loadConversation(
-                                Number(
-                                    conversation.id
-                                )
-                            );
-
-                            closeMobileSidebar();
-                        }
-                    );
-
-                    conversationList.appendChild(
-                        button
-                    );
-                }
-            );
-
-            highlightConversation();
-
-        } catch (error) {
-
-            console.error(
-                "CONVERSATIONS ERROR:",
-                error
-            );
-        }
-    }
-
-
-    function formatDate(value) {
-
-        if (!value) {
-            return "";
-        }
-
-        const date =
-            new Date(value);
-
-        if (
-            Number.isNaN(
-                date.getTime()
-            )
-        ) {
-            return "";
-        }
-
-        return date.toLocaleDateString(
-            "ar-EG",
-            {
-                day: "numeric",
-                month: "short"
-            }
-        );
-    }
-
-
-    function highlightConversation() {
-
-        document
-            .querySelectorAll(
-                ".conversation-item"
-            )
-            .forEach(
-                item => {
-
-                    item.classList.toggle(
-                        "active",
-
-                        Number(
-                            item.dataset.id
-                        ) ===
-                        Number(
-                            currentConversationId
-                        )
-                    );
-                }
-            );
-    }
-
-
-    /* =========================================================
-       CREATE CONVERSATION
-    ========================================================= */
-
-    async function createConversation(
-        title
-    ) {
-
-        const response =
-            await fetch(
-                "/api/conversations",
-                {
-                    method:
-                        "POST",
-
-                    credentials:
-                        "include",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body:
-                        JSON.stringify({
-                            title:
-                                title ||
-                                "محادثة جديدة"
-                        })
-                }
-            );
-
-        let data;
-
-        try {
-
-            data =
-                await response.json();
-
-        } catch {
-
-            throw new Error(
-                "السيرفر لم يرجع استجابة صحيحة."
-            );
-        }
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.error ||
-                "تعذر إنشاء المحادثة."
-            );
-        }
-
-        currentConversationId =
-            Number(
-                data.conversation.id
-            );
-
-        await loadConversations();
-    }
-
-
-    /* =========================================================
-       LOAD CONVERSATION
-    ========================================================= */
-
-    async function loadConversation(
-        id
-    ) {
-
-        try {
-
-            const response =
-                await fetch(
-                    `/api/conversations/${id}`,
-                    {
-                        credentials:
-                            "include"
-                    }
-                );
-
-            const data =
-                await response.json();
-
-            if (!response.ok) {
-
-                throw new Error(
-                    data.error ||
-                    "تعذر تحميل المحادثة."
-                );
+            .sidebar.mobile-open {
+                transform:
+                    translateX(0);
             }
 
-            currentConversationId =
-                Number(
-                    data.conversation.id
-                );
+            .topbar {
+                height: 58px;
+                min-height: 58px;
 
-            conversationHistory =
-                [];
-
-            chat.innerHTML =
-                "";
-
-            const titleElement =
-                document.getElementById(
-                    "chatTitle"
-                );
-
-            if (titleElement) {
-
-                titleElement.textContent =
-                    data.conversation.title ||
-                    "Physics AI";
+                padding: 0 8px;
             }
 
-            const messages =
-                Array.isArray(
-                    data.messages
-                )
-                    ? data.messages
-                    : [];
+            .chat {
+                padding:
+                    20px 10px 155px;
+            }
 
-            messages.forEach(
-                message => {
+            .lesson-bar {
+                padding:
+                    9px 10px;
+            }
 
-                    conversationHistory.push({
-                        role:
-                            message.role,
+            #lessonName {
+                font-size: 14px;
+            }
 
-                        content:
-                            message.content
-                    });
+            #lessonDescription {
+                font-size: 10px;
+            }
 
-                    addMessage(
-                        message.content,
+            .message {
+                gap: 8px;
+            }
 
-                        message.role ===
-                            "assistant"
-                            ? "bot"
-                            : "user",
+            .bubble {
+                max-width:
+                    calc(100% - 42px);
 
-                        message.image
-                    );
-                }
-            );
+                font-size: 13px;
+            }
 
-            highlightConversation();
-
-            scrollBottom();
-
-        } catch (error) {
-
-            console.error(
-                "LOAD CONVERSATION ERROR:",
-                error
-            );
-
-            addMessage(
-                error.message ||
-                "تعذر تحميل المحادثة.",
-                "bot"
-            );
+            .welcome {
+                margin:
+                    28px auto;
+            }
         }
-    }
+
+        /* =========================================================
+           SMALL PHONE
+        ========================================================= */
+
+        @media (max-width: 600px) {
+
+            .topbar {
+                height: 56px;
+                min-height: 56px;
+
+                padding: 0 6px;
+            }
+
+            .icon-button {
+                width: 38px;
+                height: 38px;
+            }
+
+            .page-title {
+                max-width: 44vw;
+                font-size: 13px;
+            }
+
+            .online {
+                display: none;
+            }
+
+            #userName {
+                display: none;
+            }
+
+            .lesson-bar {
+                min-height: 44px;
+            }
+
+            .lesson-badge {
+                font-size: 9px;
+            }
+
+            #lessonName {
+                font-size: 13px;
+            }
+
+            #lessonDescription {
+                display: none;
+            }
+
+            .welcome {
+                margin:
+                    20px auto;
+            }
+
+            .welcome-icon {
+                width: 57px;
+                height: 57px;
+
+                border-radius: 17px;
+
+                font-size: 24px;
+            }
+
+            .welcome h1 {
+                font-size: 25px;
+            }
+
+            .welcome p {
+                font-size: 12px;
+            }
+
+            .message {
+                margin-bottom: 15px;
+            }
+
+            .avatar {
+                width: 29px;
+                height: 29px;
+
+                flex-basis: 29px;
+
+                border-radius: 9px;
+
+                font-size: 9px;
+            }
+
+            .bubble {
+                max-width:
+                    calc(100% - 37px);
+
+                font-size: 12.5px;
+
+                line-height: 1.8;
+            }
+
+            .message.user .bubble {
+                padding:
+                    9px 11px;
+            }
+
+            .composer-area {
+                padding:
+                    6px 6px
+                    calc(6px + env(safe-area-inset-bottom));
+            }
+
+            .input-wrapper {
+                border-radius: 16px;
+
+                padding: 6px;
+
+                gap: 5px;
+            }
+
+            .tools {
+                gap: 4px;
+            }
+
+            .tool-button,
+            .send-button {
+                width: 39px;
+                height: 39px;
+
+                flex-basis: 39px;
+
+                border-radius: 10px;
+            }
+
+            #messageInput {
+                min-height: 39px;
+
+                padding:
+                    9px 7px;
+
+                font-size: 13px;
+            }
+
+            .input-hint {
+                display: none;
+            }
+
+            .image-preview {
+                bottom: 91px;
+            }
+        }
+
+        /* =========================================================
+           VERY SMALL PHONE
+        ========================================================= */
+
+        @media (max-width: 390px) {
+
+            .tool-button,
+            .send-button {
+                width: 36px;
+                height: 36px;
+
+                flex-basis: 36px;
+
+                font-size: 15px;
+            }
+
+            #messageInput {
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- =========================================================
+         MOBILE OVERLAY
+    ========================================================== -->
+
+    <div
+        id="mobileOverlay"
+        class="mobile-overlay"
+    ></div>
 
 
-    /* =========================================================
-       NEW CHAT
-    ========================================================= */
+    <!-- =========================================================
+         SIDEBAR
+    ========================================================== -->
 
-    newChatButton?.addEventListener(
-        "click",
-        () => {
+    <aside
+        id="sidebar"
+        class="sidebar"
+    >
 
-            currentConversationId =
-                null;
+        <div class="sidebar-header">
 
-            conversationHistory =
-                [];
+            <div class="brand">
 
-            clearImage();
+                <div class="brand-logo">
+                    Φ
+                </div>
 
-            hideTyping();
+                <div>
 
-            chat.innerHTML =
-                `
+                    <div class="brand-title">
+                        Physics AI
+                    </div>
+
+                    <div class="brand-subtitle">
+                        مدرسك الذكي في الفيزياء
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <button
+                id="newChatButton"
+                class="new-chat"
+                type="button"
+            >
+                ＋ محادثة جديدة
+            </button>
+
+        </div>
+
+
+        <div class="sidebar-title">
+            المحادثات
+        </div>
+
+
+        <div
+            id="conversationList"
+            class="conversation-list"
+        ></div>
+
+
+        <a
+            href="/study.html"
+            class="study-link"
+        >
+            📚 المناهج والموسوعة
+        </a>
+
+    </aside>
+
+
+    <!-- =========================================================
+         MAIN
+    ========================================================== -->
+
+    <main class="main">
+
+
+        <!-- =====================================================
+             TOPBAR
+        ====================================================== -->
+
+        <header class="topbar">
+
+            <div class="topbar-right">
+
+                <button
+                    id="sidebarButton"
+                    class="icon-button"
+                    type="button"
+                    title="إظهار أو إخفاء المحادثات"
+                    aria-label="إظهار أو إخفاء المحادثات"
+                >
+                    ☰
+                </button>
+
+
+                <div class="page-info">
+
+                    <div
+                        id="chatTitle"
+                        class="page-title"
+                    >
+                        Physics AI
+                    </div>
+
+                    <div class="online">
+                        ● متصل
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="topbar-left">
+
+                <span id="userName"></span>
+
+                <button
+                    id="themeButton"
+                    class="icon-button"
+                    type="button"
+                    title="تغيير المظهر"
+                    aria-label="تغيير المظهر"
+                >
+                    ☀
+                </button>
+
+
+                <button
+                    id="logoutButton"
+                    class="icon-button"
+                    type="button"
+                    title="تسجيل الخروج"
+                    aria-label="تسجيل الخروج"
+                >
+                    ⎋
+                </button>
+
+            </div>
+
+        </header>
+
+
+        <!-- =====================================================
+             LESSON BAR
+        ====================================================== -->
+
+        <section
+            id="lessonBar"
+            class="lesson-bar"
+        >
+
+            <div class="lesson-main">
+
+                <div class="lesson-badge">
+                    ⚛️ Physics AI
+                </div>
+
+                <h2 id="lessonName">
+                    الفيزياء
+                </h2>
+
+                <p id="lessonDescription">
+                    اسأل أي سؤال في الفيزياء وسأساعدك في الحل والفهم.
+                </p>
+
+            </div>
+
+            <div
+                id="chatMode"
+                style="
+                    color:var(--muted);
+                    font-size:10px;
+                    white-space:nowrap;
+                "
+            >
+                دردشة عامة
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             CHAT
+        ====================================================== -->
+
+        <div class="chat-wrapper">
+
+            <div
+                id="chat"
+                class="chat"
+            >
+
                 <div class="welcome">
 
                     <div class="welcome-icon">
@@ -874,1818 +1528,213 @@ document.addEventListener("DOMContentLoaded", () => {
                     </h1>
 
                     <p>
-                        اكتب سؤالك أو ارفع صورة
-                        المسألة وأنا هساعدك.
+                        اكتب سؤالك أو ارفع صورة المسألة
+                        وأنا هساعدك تفهمها وتحلها خطوة بخطوة.
                     </p>
 
                 </div>
-                `;
 
-            const title =
-                document.getElementById(
-                    "chatTitle"
-                );
+            </div>
 
-            if (title) {
 
-                title.textContent =
-                    "Physics AI";
-            }
+            <!-- =================================================
+                 IMAGE PREVIEW
+            ================================================== -->
+
+            <div
+                id="imagePreview"
+                class="image-preview hidden"
+            >
 
-            messageInput.value =
-                "";
+                <img
+                    id="previewImage"
+                    alt="الصورة المرفقة"
+                >
+
+                <button
+                    id="removeImageButton"
+                    type="button"
+                    aria-label="إزالة الصورة"
+                    title="إزالة الصورة"
+                >
+                    ×
+                </button>
 
-            resizeInput();
+            </div>
 
-            closeMobileSidebar();
 
-            messageInput.focus();
-        }
-    );
+            <!-- =================================================
+                 COMPOSER
+            ================================================== -->
 
+            <div class="composer-area">
 
-    /* =========================================================
-       ADD MESSAGE
-    ========================================================= */
+                <div class="input-wrapper">
 
-    function addMessage(
-        text,
-        type,
-        image = null
-    ) {
+                    <div class="tools">
 
-        const wrapper =
-            document.createElement(
-                "div"
-            );
+                        <button
+                            id="uploadButton"
+                            class="tool-button"
+                            type="button"
+                            title="رفع صورة"
+                            aria-label="رفع صورة"
+                        >
+                            🖼️
+                        </button>
 
-        wrapper.className =
-            `message ${type}`;
 
+                        <button
+                            id="cameraButton"
+                            class="tool-button"
+                            type="button"
+                            title="الكاميرا"
+                            aria-label="الكاميرا"
+                        >
+                            📷
+                        </button>
 
-        const avatar =
-            document.createElement(
-                "div"
-            );
 
-        avatar.className =
-            "avatar";
+                        <button
+                            id="voiceButton"
+                            class="tool-button"
+                            type="button"
+                            title="تسجيل صوت"
+                            aria-label="تسجيل صوت"
+                        >
+                            🎙️
+                        </button>
 
-        avatar.textContent =
-            type === "user"
-                ? "👤"
-                : "⚛️";
 
+                        <input
+                            type="file"
+                            id="imageInput"
+                            accept="image/*"
+                            hidden
+                        >
 
-        const bubble =
-            document.createElement(
-                "div"
-            );
 
-        bubble.className =
-            "bubble";
+                        <input
+                            type="file"
+                            id="cameraInput"
+                            accept="image/*"
+                            capture="environment"
+                            hidden
+                        >
 
+                    </div>
 
-        const strong =
-            document.createElement(
-                "strong"
-            );
 
-        strong.textContent =
-            type === "user"
-                ? (
-                    currentUser?.name ||
-                    "أنت"
-                )
-                : "Physics AI";
+                    <textarea
+                        id="messageInput"
+                        rows="1"
+                        placeholder="اكتب سؤالك هنا..."
+                        aria-label="اكتب سؤالك هنا"
+                    ></textarea>
 
 
-        const paragraph =
-            document.createElement(
-                "p"
-            );
+                    <button
+                        id="sendButton"
+                        class="send-button"
+                        type="button"
+                        aria-label="إرسال"
+                        title="إرسال"
+                    >
+                        ↑
+                    </button>
 
-        paragraph.textContent =
-            String(
-                text || ""
-            );
+                </div>
 
 
-        bubble.appendChild(
-            strong
-        );
+                <div
+                    id="voiceStatus"
+                    class="voice-status"
+                    aria-live="polite"
+                ></div>
 
-        bubble.appendChild(
-            paragraph
-        );
 
+                <div class="input-hint">
+                    Enter للإرسال
+                    <span>•</span>
+                    Shift + Enter لسطر جديد
+                </div>
 
-        if (
-            image &&
-            typeof image === "string" &&
-            image.startsWith(
-                "data:image/"
-            )
-        ) {
+            </div>
 
-            const img =
-                document.createElement(
-                    "img"
-                );
+        </div>
 
-            img.src =
-                image;
+    </main>
 
-            img.alt =
-                "الصورة المرفقة";
+</div>
 
-            img.loading =
-                "lazy";
 
-            bubble.appendChild(
-                img
-            );
-        }
+<!-- =========================================================
+     CAMERA MODAL
+========================================================= -->
 
+<div
+    id="cameraModal"
+    class="modal hidden"
+>
 
-        wrapper.appendChild(
-            avatar
-        );
+    <div class="modal-card">
 
-        wrapper.appendChild(
-            bubble
-        );
+        <div class="modal-header">
 
-        chat.appendChild(
-            wrapper
-        );
+            <h3>
+                تصوير المسألة
+            </h3>
 
-        scrollBottom();
-    }
+            <button
+                id="closeCameraButton"
+                type="button"
+                aria-label="إغلاق"
+                title="إغلاق"
+            >
+                ×
+            </button>
 
+        </div>
 
-    /* =========================================================
-       TYPING INDICATOR
-    ========================================================= */
 
-    function showTyping() {
+        <video
+            id="cameraVideo"
+            autoplay
+            playsinline
+        ></video>
 
-        hideTyping();
 
-        const wrapper =
-            document.createElement(
-                "div"
-            );
+        <canvas
+            id="cameraCanvas"
+            hidden
+        ></canvas>
 
-        wrapper.id =
-            "physicsTyping";
 
-        wrapper.className =
-            "message bot";
+        <button
+            id="takePhotoButton"
+            class="capture-button"
+            type="button"
+        >
+            📷 التقاط الصورة
+        </button>
 
 
-        const avatar =
-            document.createElement(
-                "div"
-            );
+        <p
+            id="cameraError"
+        ></p>
 
-        avatar.className =
-            "avatar";
+    </div>
 
-        avatar.textContent =
-            "⚛️";
+</div>
 
 
-        const bubble =
-            document.createElement(
-                "div"
-            );
+<!-- =========================================================
+     IMPORTANT:
+     chat.js فقط
+========================================================= -->
 
-        bubble.className =
-            "bubble";
+<script src="chat.js"></script>
 
+</body>
 
-        const strong =
-            document.createElement(
-                "strong"
-            );
-
-        strong.textContent =
-            "Physics AI";
-
-
-        const paragraph =
-            document.createElement(
-                "p"
-            );
-
-        paragraph.textContent =
-            "جاري التفكير...";
-
-
-        bubble.appendChild(
-            strong
-        );
-
-        bubble.appendChild(
-            paragraph
-        );
-
-
-        wrapper.appendChild(
-            avatar
-        );
-
-        wrapper.appendChild(
-            bubble
-        );
-
-        chat.appendChild(
-            wrapper
-        );
-
-        scrollBottom();
-    }
-
-
-    function hideTyping() {
-
-        document
-            .getElementById(
-                "physicsTyping"
-            )
-            ?.remove();
-    }
-
-
-    function scrollBottom() {
-
-        requestAnimationFrame(
-            () => {
-
-                chat.scrollTop =
-                    chat.scrollHeight;
-            }
-        );
-    }
-
-
-    /* =========================================================
-       SAVE MESSAGE
-    ========================================================= */
-
-    async function saveMessage(
-        role,
-        content,
-        image = null
-    ) {
-
-        if (
-            !currentConversationId ||
-            !content
-        ) {
-            return;
-        }
-
-        try {
-
-            const response =
-                await fetch(
-                    `/api/conversations/${currentConversationId}/messages`,
-                    {
-                        method:
-                            "POST",
-
-                        credentials:
-                            "include",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify({
-                                role,
-                                content,
-                                image
-                            })
-                    }
-                );
-
-            if (!response.ok) {
-
-                const data =
-                    await response
-                        .json()
-                        .catch(
-                            () => ({})
-                        );
-
-                console.error(
-                    "SAVE MESSAGE:",
-                    data
-                );
-            }
-
-        } catch (error) {
-
-            console.error(
-                "SAVE MESSAGE ERROR:",
-                error
-            );
-        }
-    }
-
-
-    /* =========================================================
-       SEND MESSAGE
-    ========================================================= */
-
-    async function sendMessage() {
-
-        if (isSending) {
-            return;
-        }
-
-        const text =
-            messageInput.value.trim();
-
-        if (
-            !text &&
-            !selectedImage
-        ) {
-            return;
-        }
-
-        isSending =
-            true;
-
-        sendButton.disabled =
-            true;
-
-        const image =
-            selectedImage;
-
-        const userText =
-            text ||
-            "حل المسألة الموجودة في الصورة.";
-
-        try {
-
-            /* إنشاء محادثة جديدة */
-
-            if (
-                !currentConversationId
-            ) {
-
-                await createConversation(
-                    userText.slice(
-                        0,
-                        50
-                    )
-                );
-            }
-
-
-            /* عرض رسالة المستخدم */
-
-            addMessage(
-                userText,
-                "user",
-                image
-            );
-
-
-            conversationHistory.push({
-                role:
-                    "user",
-
-                content:
-                    userText
-            });
-
-
-            /* الحفاظ على التاريخ */
-
-            if (
-                conversationHistory.length >
-                20
-            ) {
-
-                conversationHistory =
-                    conversationHistory.slice(
-                        -20
-                    );
-            }
-
-
-            /* تنظيف */
-
-            messageInput.value =
-                "";
-
-            resizeInput();
-
-            clearImage();
-
-            showTyping();
-
-
-            /* إرسال للسيرفر */
-
-            const response =
-                await fetch(
-                    "/api/chat",
-                    {
-                        method:
-                            "POST",
-
-                        credentials:
-                            "include",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify({
-
-                                message:
-                                    userText,
-
-                                history:
-                                    conversationHistory
-                                        .slice(
-                                            -20
-                                        ),
-
-                                grade:
-                                    gradeSelect?.value ||
-                                    "",
-
-                                subject:
-                                    subjectSelect?.value ||
-                                    "الفيزياء",
-
-                                unit:
-                                    getSelectText(
-                                        unitSelect
-                                    ),
-
-                                lesson:
-                                    getSelectText(
-                                        lessonSelect
-                                    ),
-
-                                mode:
-                                    "دردشة عامة",
-
-                                image:
-                                    image
-                            })
-                    }
-                );
-
-
-            let data;
-
-            try {
-
-                data =
-                    await response.json();
-
-            } catch {
-
-                throw new Error(
-                    "السيرفر لم يرجع استجابة صحيحة."
-                );
-            }
-
-
-            if (!response.ok) {
-
-                if (
-                    response.status ===
-                    401
-                ) {
-
-                    window.location.href =
-                        "/login.html";
-
-                    return;
-                }
-
-                throw new Error(
-                    data.error ||
-                    "فشل إرسال السؤال."
-                );
-            }
-
-
-            hideTyping();
-
-
-            const answer =
-                String(
-                    data.answer ||
-                    ""
-                ).trim();
-
-
-            addMessage(
-                answer ||
-                "لم تصل إجابة من Physics AI.",
-
-                "bot"
-            );
-
-
-            conversationHistory.push({
-                role:
-                    "assistant",
-
-                content:
-                    answer
-            });
-
-
-            if (
-                conversationHistory.length >
-                20
-            ) {
-
-                conversationHistory =
-                    conversationHistory.slice(
-                        -20
-                    );
-            }
-
-
-            /* حفظ السؤال */
-
-            await saveMessage(
-                "user",
-                userText,
-                image
-            );
-
-
-            /* حفظ الإجابة */
-
-            await saveMessage(
-                "assistant",
-                answer
-            );
-
-
-            await loadConversations();
-
-            highlightConversation();
-
-
-        } catch (error) {
-
-            console.error(
-                "SEND MESSAGE ERROR:",
-                error
-            );
-
-            hideTyping();
-
-            addMessage(
-                error.message ||
-                "حصل خطأ أثناء إرسال السؤال.",
-                "bot"
-            );
-
-        } finally {
-
-            isSending =
-                false;
-
-            sendButton.disabled =
-                false;
-
-            messageInput.focus();
-        }
-    }
-
-
-    function getSelectText(
-        select
-    ) {
-
-        if (
-            !select ||
-            select.value === ""
-        ) {
-            return "";
-        }
-
-        return (
-            select.options[
-                select.selectedIndex
-            ]?.text ||
-            ""
-        );
-    }
-
-
-    /* =========================================================
-       IMAGE UPLOAD
-    ========================================================= */
-
-    uploadButton?.addEventListener(
-        "click",
-        () => {
-
-            if (!imageInput) {
-                return;
-            }
-
-            imageInput.value =
-                "";
-
-            imageInput.click();
-        }
-    );
-
-
-    imageInput?.addEventListener(
-        "change",
-        () => {
-
-            const file =
-                imageInput.files?.[0];
-
-            if (!file) {
-                return;
-            }
-
-            prepareImage(
-                file
-            );
-        }
-    );
-
-
-    function prepareImage(
-        file
-    ) {
-
-        if (
-            !file.type ||
-            !file.type.startsWith(
-                "image/"
-            )
-        ) {
-
-            alert(
-                "من فضلك اختر صورة."
-            );
-
-            return;
-        }
-
-
-        if (
-            file.size >
-            10 * 1024 * 1024
-        ) {
-
-            alert(
-                "حجم الصورة أكبر من 10MB."
-            );
-
-            return;
-        }
-
-
-        const reader =
-            new FileReader();
-
-
-        reader.onload =
-            () => {
-
-                const img =
-                    new Image();
-
-
-                img.onload =
-                    () => {
-
-                        const max =
-                            1600;
-
-                        let width =
-                            img.width;
-
-                        let height =
-                            img.height;
-
-
-                        const ratio =
-                            Math.min(
-                                max /
-                                    width,
-
-                                max /
-                                    height,
-
-                                1
-                            );
-
-
-                        width =
-                            Math.round(
-                                width *
-                                ratio
-                            );
-
-                        height =
-                            Math.round(
-                                height *
-                                ratio
-                            );
-
-
-                        const canvas =
-                            document.createElement(
-                                "canvas"
-                            );
-
-
-                        canvas.width =
-                            width;
-
-                        canvas.height =
-                            height;
-
-
-                        const ctx =
-                            canvas.getContext(
-                                "2d"
-                            );
-
-
-                        if (!ctx) {
-
-                            alert(
-                                "تعذر تجهيز الصورة."
-                            );
-
-                            return;
-                        }
-
-
-                        ctx.drawImage(
-                            img,
-                            0,
-                            0,
-                            width,
-                            height
-                        );
-
-
-                        selectedImage =
-                            canvas.toDataURL(
-                                "image/jpeg",
-                                0.80
-                            );
-
-
-                        showImagePreview();
-
-
-                        messageInput.focus();
-                    };
-
-
-                img.onerror =
-                    () => {
-
-                        alert(
-                            "تعذر قراءة الصورة."
-                        );
-                    };
-
-
-                img.src =
-                    String(
-                        reader.result
-                    );
-            };
-
-
-        reader.onerror =
-            () => {
-
-                alert(
-                    "تعذر قراءة الصورة."
-                );
-            };
-
-
-        reader.readAsDataURL(
-            file
-        );
-    }
-
-
-    function showImagePreview() {
-
-        if (
-            !imagePreview ||
-            !previewImage ||
-            !selectedImage
-        ) {
-            return;
-        }
-
-        previewImage.src =
-            selectedImage;
-
-        imagePreview.classList.remove(
-            "hidden"
-        );
-
-        imagePreview.style.display =
-            "";
-    }
-
-
-    function clearImage() {
-
-        selectedImage =
-            null;
-
-
-        if (previewImage) {
-
-            previewImage.removeAttribute(
-                "src"
-            );
-        }
-
-
-        if (imagePreview) {
-
-            imagePreview.classList.add(
-                "hidden"
-            );
-
-            imagePreview.style.display =
-                "none";
-        }
-
-
-        if (imageInput) {
-
-            imageInput.value =
-                "";
-        }
-
-
-        if (cameraInput) {
-
-            cameraInput.value =
-                "";
-        }
-    }
-
-
-    removeImageButton?.addEventListener(
-        "click",
-        clearImage
-    );
-
-
-    /* =========================================================
-       CAMERA
-    ========================================================= */
-
-    cameraButton?.addEventListener(
-        "click",
-        async () => {
-
-            if (isMobile()) {
-
-                cameraInput?.click();
-
-                return;
-            }
-
-            await openCamera();
-        }
-    );
-
-
-    cameraInput?.addEventListener(
-        "change",
-        () => {
-
-            const file =
-                cameraInput.files?.[0];
-
-            if (!file) {
-                return;
-            }
-
-            prepareImage(
-                file
-            );
-        }
-    );
-
-
-    async function openCamera() {
-
-        if (!cameraModal) {
-            return;
-        }
-
-
-        if (
-            !navigator.mediaDevices ||
-            !navigator.mediaDevices.getUserMedia
-        ) {
-
-            if (cameraError) {
-
-                cameraError.textContent =
-                    "الكاميرا غير مدعومة في هذا المتصفح.";
-            }
-
-            cameraModal.classList.remove(
-                "hidden"
-            );
-
-            return;
-        }
-
-
-        try {
-
-            cameraStream =
-                await navigator.mediaDevices.getUserMedia(
-                    {
-                        video: {
-                            facingMode: {
-                                ideal:
-                                    "environment"
-                            }
-                        },
-
-                        audio:
-                            false
-                    }
-                );
-
-
-            if (cameraVideo) {
-
-                cameraVideo.srcObject =
-                    cameraStream;
-            }
-
-
-            if (cameraError) {
-
-                cameraError.textContent =
-                    "";
-            }
-
-
-            cameraModal.classList.remove(
-                "hidden"
-            );
-
-        } catch (error) {
-
-            console.error(
-                "CAMERA ERROR:",
-                error
-            );
-
-
-            if (cameraError) {
-
-                cameraError.textContent =
-                    "اسمح للمتصفح باستخدام الكاميرا ثم حاول مرة أخرى.";
-            }
-
-
-            cameraModal.classList.remove(
-                "hidden"
-            );
-        }
-    }
-
-
-    function closeCamera() {
-
-        cameraModal?.classList.add(
-            "hidden"
-        );
-
-
-        if (cameraStream) {
-
-            cameraStream
-                .getTracks()
-                .forEach(
-                    track => {
-                        track.stop();
-                    }
-                );
-
-            cameraStream =
-                null;
-        }
-
-
-        if (cameraVideo) {
-
-            cameraVideo.srcObject =
-                null;
-        }
-    }
-
-
-    closeCameraButton?.addEventListener(
-        "click",
-        closeCamera
-    );
-
-
-    takePhotoButton?.addEventListener(
-        "click",
-        () => {
-
-            if (
-                !cameraVideo ||
-                !cameraCanvas
-            ) {
-                return;
-            }
-
-
-            if (
-                !cameraVideo.videoWidth
-            ) {
-
-                if (cameraError) {
-
-                    cameraError.textContent =
-                        "استنى لحظة لحد ما الكاميرا تشتغل.";
-                }
-
-                return;
-            }
-
-
-            const width =
-                cameraVideo.videoWidth;
-
-            const height =
-                cameraVideo.videoHeight;
-
-            const max =
-                1600;
-
-
-            const ratio =
-                Math.min(
-                    max /
-                        width,
-
-                    max /
-                        height,
-
-                    1
-                );
-
-
-            cameraCanvas.width =
-                Math.round(
-                    width *
-                    ratio
-                );
-
-            cameraCanvas.height =
-                Math.round(
-                    height *
-                    ratio
-                );
-
-
-            const ctx =
-                cameraCanvas.getContext(
-                    "2d"
-                );
-
-
-            if (!ctx) {
-
-                return;
-            }
-
-
-            ctx.drawImage(
-                cameraVideo,
-                0,
-                0,
-                cameraCanvas.width,
-                cameraCanvas.height
-            );
-
-
-            selectedImage =
-                cameraCanvas.toDataURL(
-                    "image/jpeg",
-                    0.80
-                );
-
-
-            showImagePreview();
-
-            closeCamera();
-
-            messageInput.focus();
-        }
-    );
-
-
-    /* =========================================================
-       VOICE RECORDING
-    ========================================================= */
-
-    voiceButton?.addEventListener(
-        "click",
-        async () => {
-
-            if (isRecording) {
-
-                stopRecording();
-
-                return;
-            }
-
-            await startRecording();
-        }
-    );
-
-
-    async function startRecording() {
-
-        if (
-            !navigator.mediaDevices ||
-            !navigator.mediaDevices.getUserMedia
-        ) {
-
-            setVoiceStatus(
-                "الميكروفون غير مدعوم."
-            );
-
-            return;
-        }
-
-
-        if (
-            typeof MediaRecorder ===
-            "undefined"
-        ) {
-
-            setVoiceStatus(
-                "تسجيل الصوت غير مدعوم في هذا المتصفح."
-            );
-
-            return;
-        }
-
-
-        try {
-
-            recordingStream =
-                await navigator.mediaDevices.getUserMedia(
-                    {
-                        audio:
-                            true
-                    }
-                );
-
-
-            recordedChunks =
-                [];
-
-
-            let mimeType =
-                "";
-
-
-            const possibleTypes = [
-                "audio/webm;codecs=opus",
-                "audio/webm",
-                "audio/ogg;codecs=opus",
-                "audio/ogg"
-            ];
-
-
-            for (
-                const type
-                of possibleTypes
-            ) {
-
-                if (
-                    MediaRecorder.isTypeSupported(
-                        type
-                    )
-                ) {
-
-                    mimeType =
-                        type;
-
-                    break;
-                }
-            }
-
-
-            const options =
-                mimeType
-                    ? { mimeType }
-                    : undefined;
-
-
-            mediaRecorder =
-                new MediaRecorder(
-                    recordingStream,
-                    options
-                );
-
-
-            mediaRecorder.ondataavailable =
-                event => {
-
-                    if (
-                        event.data &&
-                        event.data.size >
-                            0
-                    ) {
-
-                        recordedChunks.push(
-                            event.data
-                        );
-                    }
-                };
-
-
-            mediaRecorder.onerror =
-                event => {
-
-                    console.error(
-                        "MEDIA RECORDER ERROR:",
-                        event
-                    );
-                };
-
-
-            mediaRecorder.onstop =
-                async () => {
-
-                    recordingStream
-                        ?.getTracks()
-                        .forEach(
-                            track => {
-                                track.stop();
-                            }
-                        );
-
-                    recordingStream =
-                        null;
-
-                    await transcribeAudio();
-                };
-
-
-            mediaRecorder.start(
-                250
-            );
-
-
-            isRecording =
-                true;
-
-
-            if (voiceButton) {
-
-                voiceButton.textContent =
-                    "⏹️";
-            }
-
-
-            setVoiceStatus(
-                "جاري التسجيل... اضغط مرة أخرى للإيقاف."
-            );
-
-        } catch (error) {
-
-            console.error(
-                "RECORDING ERROR:",
-                error
-            );
-
-
-            setVoiceStatus(
-                "تعذر فتح الميكروفون. اسمح للمتصفح باستخدامه."
-            );
-        }
-    }
-
-
-    function stopRecording() {
-
-        if (
-            mediaRecorder &&
-            mediaRecorder.state !==
-                "inactive"
-        ) {
-
-            mediaRecorder.stop();
-
-        } else {
-
-            recordingStream
-                ?.getTracks()
-                .forEach(
-                    track => {
-                        track.stop();
-                    }
-                );
-        }
-
-
-        isRecording =
-            false;
-
-
-        if (voiceButton) {
-
-            voiceButton.textContent =
-                "🎙️";
-        }
-    }
-
-
-    async function transcribeAudio() {
-
-        try {
-
-            if (
-                !recordedChunks.length
-            ) {
-
-                setVoiceStatus(
-                    "لم يتم تسجيل صوت."
-                );
-
-                return;
-            }
-
-
-            setVoiceStatus(
-                "جاري تحويل التسجيل إلى نص..."
-            );
-
-
-            const blob =
-                new Blob(
-                    recordedChunks,
-                    {
-                        type:
-                            recordedChunks[0]
-                                ?.type ||
-                            "audio/webm"
-                    }
-                );
-
-
-            if (!blob.size) {
-
-                throw new Error(
-                    "التسجيل فارغ."
-                );
-            }
-
-
-            const formData =
-                new FormData();
-
-
-            formData.append(
-                "audio",
-                blob,
-                "physics-question.webm"
-            );
-
-
-            const response =
-                await fetch(
-                    "/api/transcribe",
-                    {
-                        method:
-                            "POST",
-
-                        credentials:
-                            "include",
-
-                        body:
-                            formData
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                throw new Error(
-                    data.error ||
-                    "تعذر تحويل التسجيل."
-                );
-            }
-
-
-            const text =
-                String(
-                    data.text ||
-                    ""
-                ).trim();
-
-
-            if (text) {
-
-                messageInput.value =
-                    text;
-
-                resizeInput();
-
-                messageInput.focus();
-
-                setVoiceStatus(
-                    "تم تحويل التسجيل إلى نص."
-                );
-
-            } else {
-
-                setVoiceStatus(
-                    "لم أستطع استخراج كلام واضح من التسجيل."
-                );
-            }
-
-        } catch (error) {
-
-            console.error(
-                "TRANSCRIBE ERROR:",
-                error
-            );
-
-
-            setVoiceStatus(
-                error.message ||
-                "فشل تحويل التسجيل."
-            );
-
-        } finally {
-
-            recordedChunks =
-                [];
-
-            mediaRecorder =
-                null;
-
-
-            setTimeout(
-                () => {
-
-                    setVoiceStatus(
-                        ""
-                    );
-
-                },
-                3000
-            );
-        }
-    }
-
-
-    function setVoiceStatus(
-        text
-    ) {
-
-        if (voiceStatus) {
-
-            voiceStatus.textContent =
-                text || "";
-        }
-    }
-
-
-    /* =========================================================
-       CURRICULUM
-    ========================================================= */
-
-    function resetUnitsAndLessons() {
-
-        if (unitSelect) {
-
-            unitSelect.innerHTML =
-                `
-                <option value="">
-                    اختر الوحدة
-                </option>
-                `;
-        }
-
-
-        if (lessonSelect) {
-
-            lessonSelect.innerHTML =
-                `
-                <option value="">
-                    اختر الدرس
-                </option>
-                `;
-        }
-    }
-
-
-    gradeSelect?.addEventListener(
-        "change",
-        () => {
-
-            resetUnitsAndLessons();
-
-
-            const data =
-                curriculum[
-                    gradeSelect.value
-                ];
-
-
-            if (!data) {
-
-                if (lessonName) {
-
-                    lessonName.textContent =
-                        "دردشة عامة";
-                }
-
-
-                if (lessonDescription) {
-
-                    lessonDescription.textContent =
-                        "اسأل Physics AI عن الفيزياء.";
-                }
-
-                return;
-            }
-
-
-            data.units.forEach(
-                (
-                    unit,
-                    index
-                ) => {
-
-                    const option =
-                        document.createElement(
-                            "option"
-                        );
-
-
-                    option.value =
-                        String(index);
-
-
-                    option.textContent =
-                        unit.title;
-
-
-                    unitSelect?.appendChild(
-                        option
-                    );
-                }
-            );
-
-
-            if (lessonName) {
-
-                lessonName.textContent =
-                    "اختر الدرس";
-            }
-
-
-            if (lessonDescription) {
-
-                lessonDescription.textContent =
-                    "حدد الوحدة والدرس لزيادة دقة السياق.";
-            }
-        }
-    );
-
-
-    unitSelect?.addEventListener(
-        "change",
-        () => {
-
-            if (lessonSelect) {
-
-                lessonSelect.innerHTML =
-                    `
-                    <option value="">
-                        اختر الدرس
-                    </option>
-                    `;
-            }
-
-
-            const data =
-                curriculum[
-                    gradeSelect?.value
-                ];
-
-
-            if (
-                !data ||
-                !unitSelect ||
-                unitSelect.value === ""
-            ) {
-
-                return;
-            }
-
-
-            const unit =
-                data.units[
-                    Number(
-                        unitSelect.value
-                    )
-                ];
-
-
-            if (!unit) {
-                return;
-            }
-
-
-            unit.lessons.forEach(
-                (
-                    lesson,
-                    index
-                ) => {
-
-                    const option =
-                        document.createElement(
-                            "option"
-                        );
-
-
-                    option.value =
-                        String(index);
-
-
-                    option.textContent =
-                        lesson;
-
-
-                    lessonSelect?.appendChild(
-                        option
-                    );
-                }
-            );
-
-
-            if (lessonName) {
-
-                lessonName.textContent =
-                    unit.title;
-            }
-
-
-            if (lessonDescription) {
-
-                lessonDescription.textContent =
-                    "اختر الدرس لتحديد السياق الدراسي.";
-            }
-        }
-    );
-
-
-    lessonSelect?.addEventListener(
-        "change",
-        () => {
-
-            if (
-                lessonName &&
-                lessonSelect &&
-                lessonSelect.value !== ""
-            ) {
-
-                lessonName.textContent =
-                    lessonSelect.options[
-                        lessonSelect.selectedIndex
-                    ]?.text ||
-                    "الدرس";
-            }
-
-
-            if (lessonDescription) {
-
-                lessonDescription.textContent =
-                    "اسأل Physics AI عن أي سؤال في هذا الدرس.";
-            }
-        }
-    );
-
-
-    /* =========================================================
-       LOGOUT
-    ========================================================= */
-
-    logoutButton?.addEventListener(
-        "click",
-        async () => {
-
-            try {
-
-                await fetch(
-                    "/api/auth/logout",
-                    {
-                        method:
-                            "POST",
-
-                        credentials:
-                            "include"
-                    }
-                );
-
-            } catch (error) {
-
-                console.error(
-                    "LOGOUT ERROR:",
-                    error
-                );
-            }
-
-
-            window.location.href =
-                "/login.html";
-        }
-    );
-
-
-    /* =========================================================
-       INIT
-    ========================================================= */
-
-    (async function init() {
-
-        try {
-
-            const loggedIn =
-                await loadUser();
-
-
-            if (!loggedIn) {
-                return;
-            }
-
-
-            await loadConversations();
-
-
-            resizeInput();
-
-
-            messageInput.focus();
-
-        } catch (error) {
-
-            console.error(
-                "INIT ERROR:",
-                error
-            );
-
-
-            window.location.href =
-                "/login.html";
-        }
-
-    })();
-
-});
+</html>
