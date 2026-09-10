@@ -2,7 +2,6 @@
 <html lang="ar" dir="rtl">
 
 <head>
-
     <meta charset="UTF-8">
 
     <meta
@@ -10,591 +9,1863 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>
-        Physics AI | تسجيل الدخول
-    </title>
+    <title>Physics AI | الدخول</title>
 
-    <link rel="stylesheet" href="style.css">
+    <meta
+        name="description"
+        content="Physics AI - مدرس الفيزياء الذكي"
+    >
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+    >
 
     <style>
 
-        .auth-page {
+        /* =========================================================
+           RESET
+        ========================================================= */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: "Cairo", "Inter", sans-serif;
+            background:
+                radial-gradient(
+                    circle at 12% 15%,
+                    rgba(124, 92, 255, 0.16),
+                    transparent 30%
+                ),
+                radial-gradient(
+                    circle at 88% 85%,
+                    rgba(228, 184, 92, 0.10),
+                    transparent 28%
+                ),
+                linear-gradient(
+                    135deg,
+                    #060914 0%,
+                    #0a0e1a 45%,
+                    #080b14 100%
+                );
+            color: #f8f9fc;
+            overflow-x: hidden;
+        }
+
+        button,
+        input {
+            font-family: inherit;
+        }
+
+        button {
+            border: 0;
+        }
+
+        a {
+            color: inherit;
+        }
+
+
+        /* =========================================================
+           BACKGROUND
+        ========================================================= */
+
+        .page-background {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .glow {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(20px);
+            opacity: 0.55;
+        }
+
+        .glow-one {
+            width: 280px;
+            height: 280px;
+            top: -90px;
+            right: -80px;
+            background: rgba(113, 81, 255, 0.18);
+        }
+
+        .glow-two {
+            width: 220px;
+            height: 220px;
+            left: -70px;
+            bottom: -70px;
+            background: rgba(225, 179, 76, 0.12);
+        }
+
+        .grid {
+            position: absolute;
+            inset: 0;
+            opacity: 0.17;
+            background-image:
+                linear-gradient(
+                    rgba(255,255,255,0.035) 1px,
+                    transparent 1px
+                ),
+                linear-gradient(
+                    90deg,
+                    rgba(255,255,255,0.035) 1px,
+                    transparent 1px
+                );
+            background-size: 46px 46px;
+            mask-image:
+                linear-gradient(
+                    to bottom,
+                    black,
+                    transparent 90%
+                );
+        }
+
+
+        /* =========================================================
+           LAYOUT
+        ========================================================= */
+
+        .page {
+            position: relative;
+            z-index: 1;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 25px;
+            padding: 28px;
         }
 
-        .auth-card {
-            width: min(450px, 100%);
-            background: white;
-            border: 1px solid #e5e9f0;
-            border-radius: 24px;
-            padding: 35px;
-            box-shadow: 0 20px 60px rgba(20, 30, 50, 0.08);
+        .auth-shell {
+            width: min(1120px, 100%);
+            min-height: 690px;
+            display: grid;
+            grid-template-columns: 1.02fr 0.98fr;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 30px;
+            overflow: hidden;
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(18, 23, 40, 0.96),
+                    rgba(8, 12, 23, 0.97)
+                );
+            box-shadow:
+                0 35px 100px rgba(0,0,0,0.48),
+                inset 0 1px 0 rgba(255,255,255,0.04);
+            backdrop-filter: blur(24px);
         }
 
-        .auth-logo {
-            width: 65px;
-            height: 65px;
-            border-radius: 18px;
-            background: #172033;
-            color: white;
+
+        /* =========================================================
+           LEFT SIDE
+        ========================================================= */
+
+        .visual-panel {
+            position: relative;
+            padding: 58px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background:
+                radial-gradient(
+                    circle at 30% 20%,
+                    rgba(117, 87, 255, 0.15),
+                    transparent 36%
+                ),
+                linear-gradient(
+                    145deg,
+                    rgba(20, 26, 47, 0.95),
+                    rgba(10, 14, 28, 0.96)
+                );
+            border-left: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .visual-panel::before {
+            content: "";
+            position: absolute;
+            width: 340px;
+            height: 340px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.06);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .visual-panel::after {
+            content: "";
+            position: absolute;
+            width: 440px;
+            height: 440px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.035);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .brand-mini {
+            position: relative;
+            z-index: 2;
+            display: inline-flex;
+            align-items: center;
+            gap: 13px;
+            width: fit-content;
+        }
+
+        .brand-mark {
+            width: 48px;
+            height: 48px;
+            border-radius: 15px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 30px;
-            margin: 0 auto 20px;
+            font-size: 20px;
+            font-weight: 800;
+            color: #ffffff;
+            background:
+                linear-gradient(
+                    145deg,
+                    #765cff,
+                    #4e39bf
+                );
+            box-shadow:
+                0 10px 30px rgba(98, 73, 255, 0.27);
         }
 
-        .auth-card h1 {
-            text-align: center;
+        .brand-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .brand-name {
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+
+        .brand-subtitle {
+            font-size: 11px;
+            color: rgba(255,255,255,0.47);
+            font-weight: 500;
+        }
+
+        .visual-content {
+            position: relative;
+            z-index: 2;
+            max-width: 470px;
+            margin: auto 0;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 18px;
+            padding: 8px 12px;
+            border: 1px solid rgba(228,184,92,0.18);
+            border-radius: 999px;
+            background: rgba(228,184,92,0.06);
+            color: #e5be6b;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .eyebrow-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #e5be6b;
+            box-shadow:
+                0 0 12px rgba(229,190,107,0.75);
+        }
+
+        .visual-title {
+            font-size: clamp(32px, 4vw, 56px);
+            line-height: 1.15;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 20px;
+        }
+
+        .visual-title .highlight {
+            display: block;
+            color: #aa98ff;
+        }
+
+        .visual-description {
+            color: rgba(255,255,255,0.58);
+            font-size: 15px;
+            line-height: 2;
+            max-width: 440px;
+        }
+
+        .features {
+            position: relative;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 35px;
+        }
+
+        .feature {
+            padding: 15px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.065);
+            background: rgba(255,255,255,0.027);
+        }
+
+        .feature-title {
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 5px;
+            color: rgba(255,255,255,0.9);
+        }
+
+        .feature-text {
+            font-size: 10px;
+            line-height: 1.8;
+            color: rgba(255,255,255,0.40);
+        }
+
+        .visual-footer {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            color: rgba(255,255,255,0.35);
+            font-size: 10px;
+        }
+
+        .physics-symbols {
+            display: flex;
+            gap: 12px;
+        }
+
+        .symbol {
+            width: 34px;
+            height: 34px;
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255,255,255,0.55);
+            background: rgba(255,255,255,0.025);
+            font-size: 11px;
+        }
+
+
+        /* =========================================================
+           RIGHT SIDE
+        ========================================================= */
+
+        .form-panel {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 56px;
+            background:
+                linear-gradient(
+                    180deg,
+                    rgba(255,255,255,0.025),
+                    rgba(255,255,255,0.01)
+                );
+        }
+
+        .auth-box {
+            width: min(420px, 100%);
+        }
+
+        .auth-heading {
+            margin-bottom: 26px;
+        }
+
+        .auth-heading h1 {
+            font-size: 30px;
+            line-height: 1.35;
+            font-weight: 800;
             margin-bottom: 8px;
         }
 
-        .auth-subtitle {
-            text-align: center;
-            color: #777f8c;
-            margin-bottom: 25px;
+        .auth-heading p {
+            color: rgba(255,255,255,0.42);
+            font-size: 13px;
+            line-height: 1.9;
         }
 
-        .auth-tabs {
+
+        /* =========================================================
+           TABS
+        ========================================================= */
+
+        .tabs {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            background: #f2f4f7;
+            gap: 5px;
             padding: 5px;
-            border-radius: 13px;
-            margin-bottom: 22px;
+            margin-bottom: 25px;
+            border-radius: 15px;
+            background: rgba(255,255,255,0.035);
+            border: 1px solid rgba(255,255,255,0.055);
         }
 
-        .auth-tab {
-            border: none;
-            padding: 12px;
-            border-radius: 10px;
-            background: transparent;
+        .tab {
+            height: 46px;
+            border-radius: 11px;
             cursor: pointer;
-            font-weight: bold;
+            color: rgba(255,255,255,0.40);
+            background: transparent;
+            font-size: 13px;
+            font-weight: 700;
+            transition:
+                background 0.2s ease,
+                color 0.2s ease,
+                transform 0.2s ease;
         }
 
-        .auth-tab.active {
-            background: white;
-            box-shadow: 0 3px 10px rgba(0,0,0,.05);
+        .tab:hover {
+            color: rgba(255,255,255,0.75);
         }
 
-        .auth-form {
+        .tab.active {
+            color: #ffffff;
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(116, 88, 255, 0.22),
+                    rgba(116, 88, 255, 0.10)
+                );
+            box-shadow:
+                inset 0 0 0 1px rgba(140,119,255,0.16),
+                0 8px 22px rgba(0,0,0,0.16);
+        }
+
+
+        /* =========================================================
+           FORMS
+        ========================================================= */
+
+        .form {
             display: none;
         }
 
-        .auth-form.active {
+        .form.active {
             display: block;
+            animation: formIn 0.3s ease;
         }
 
-        .form-group {
-            margin-bottom: 15px;
+        @keyframes formIn {
+            from {
+                opacity: 0;
+                transform: translateY(7px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        .form-group label {
+        .field {
+            margin-bottom: 17px;
+        }
+
+        .field label {
             display: block;
-            font-size: 13px;
-            font-weight: bold;
-            margin-bottom: 7px;
+            margin-bottom: 8px;
+            color: rgba(255,255,255,0.74);
+            font-size: 12px;
+            font-weight: 700;
         }
 
-        .form-group input {
+        .input-wrap {
+            position: relative;
+        }
+
+        .input-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255,255,255,0.28);
+            font-size: 12px;
+            pointer-events: none;
+        }
+
+        .field input {
             width: 100%;
-            padding: 14px;
-            border: 1px solid #d9dee7;
-            border-radius: 12px;
+            height: 54px;
+            padding:
+                0 45px
+                0 16px;
+            border-radius: 14px;
             outline: none;
-            font-family: inherit;
-            font-size: 14px;
+            border: 1px solid rgba(255,255,255,0.085);
+            color: #ffffff;
+            background: rgba(255,255,255,0.035);
+            font-size: 13px;
+            transition:
+                border-color 0.2s ease,
+                background 0.2s ease,
+                box-shadow 0.2s ease;
         }
 
-        .form-group input:focus {
-            border-color: #172033;
+        .field input::placeholder {
+            color: rgba(255,255,255,0.22);
         }
 
-        .auth-button {
-            width: 100%;
-            border: none;
-            padding: 14px;
-            border-radius: 12px;
-            background: #172033;
-            color: white;
-            font-weight: bold;
+        .field input:focus {
+            border-color: rgba(125,96,255,0.62);
+            background: rgba(255,255,255,0.045);
+            box-shadow:
+                0 0 0 4px rgba(111,82,255,0.09);
+        }
+
+        .password-toggle {
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 32px;
+            height: 32px;
+            border-radius: 9px;
+            color: rgba(255,255,255,0.34);
+            background: transparent;
             cursor: pointer;
-            margin-top: 5px;
+            font-size: 11px;
         }
 
-        .auth-button:disabled {
-            opacity: .6;
+        .password-toggle:hover {
+            background: rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.65);
         }
 
-        .auth-message {
-            margin-top: 15px;
+
+        /* =========================================================
+           CHECK / TERMS
+        ========================================================= */
+
+        .terms {
+            display: flex;
+            align-items: flex-start;
+            gap: 9px;
+            margin: 10px 0 18px;
+            color: rgba(255,255,255,0.38);
+            font-size: 10px;
+            line-height: 1.8;
+        }
+
+        .terms input {
+            width: 15px;
+            height: 15px;
+            margin-top: 2px;
+            accent-color: #7561ff;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+
+        /* =========================================================
+           BUTTON
+        ========================================================= */
+
+        .submit-button {
+            width: 100%;
+            height: 56px;
+            border-radius: 15px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            color: #ffffff;
+            background:
+                linear-gradient(
+                    135deg,
+                    #7b64ff,
+                    #5b43db
+                );
+            font-size: 13px;
+            font-weight: 800;
+            box-shadow:
+                0 15px 35px rgba(95,70,226,0.22),
+                inset 0 1px 0 rgba(255,255,255,0.14);
+            transition:
+                transform 0.2s ease,
+                box-shadow 0.2s ease,
+                opacity 0.2s ease;
+        }
+
+        .submit-button::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(
+                    110deg,
+                    transparent 20%,
+                    rgba(255,255,255,0.17) 45%,
+                    transparent 70%
+                );
+            transform: translateX(-100%);
+            transition: transform 0.7s ease;
+        }
+
+        .submit-button:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 18px 40px rgba(95,70,226,0.30),
+                inset 0 1px 0 rgba(255,255,255,0.14);
+        }
+
+        .submit-button:hover::before {
+            transform: translateX(100%);
+        }
+
+        .submit-button:active {
+            transform: translateY(0);
+        }
+
+        .submit-button:disabled {
+            cursor: wait;
+            opacity: 0.65;
+            transform: none;
+        }
+
+
+        /* =========================================================
+           MESSAGE
+        ========================================================= */
+
+        .message {
+            min-height: 24px;
+            margin-top: 14px;
             text-align: center;
-            font-size: 14px;
-            min-height: 22px;
+            font-size: 12px;
+            line-height: 1.8;
+            color: #ef8f8f;
+        }
+
+        .message.success {
+            color: #8ed9ad;
+        }
+
+
+        /* =========================================================
+           BACK
+        ========================================================= */
+
+        .bottom-links {
+            margin-top: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
         }
 
         .back-link {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-            color: #667085;
+            color: rgba(255,255,255,0.38);
             text-decoration: none;
-            font-size: 13px;
+            font-size: 11px;
+            transition: color 0.2s ease;
+        }
+
+        .back-link:hover {
+            color: rgba(255,255,255,0.78);
+        }
+
+        .secure-note {
+            font-size: 10px;
+            color: rgba(255,255,255,0.25);
+        }
+
+
+        /* =========================================================
+           LOADING
+        ========================================================= */
+
+        .page-loader {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #070a13;
+            transition:
+                opacity 0.35s ease,
+                visibility 0.35s ease;
+        }
+
+        .page-loader.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .loader-box {
+            text-align: center;
+        }
+
+        .loader-icon {
+            width: 54px;
+            height: 54px;
+            margin: 0 auto 14px;
+            border-radius: 17px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background:
+                linear-gradient(
+                    145deg,
+                    #7760ff,
+                    #5038c8
+                );
+            box-shadow:
+                0 15px 40px rgba(102,80,238,0.22);
+            animation: pulseLoader 1.25s ease-in-out infinite;
+        }
+
+        .loader-icon::after {
+            content: "P";
+            font-size: 20px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .loader-text {
+            color: rgba(255,255,255,0.43);
+            font-size: 11px;
+        }
+
+        @keyframes pulseLoader {
+            0%, 100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+
+        /* =========================================================
+           MOBILE
+        ========================================================= */
+
+        @media (max-width: 900px) {
+
+            .page {
+                padding: 16px;
+            }
+
+            .auth-shell {
+                min-height: auto;
+                grid-template-columns: 1fr;
+                border-radius: 24px;
+            }
+
+            .visual-panel {
+                min-height: 360px;
+                padding: 32px 28px;
+                border-left: 0;
+                border-bottom: 1px solid rgba(255,255,255,0.06);
+            }
+
+            .visual-title {
+                font-size: 34px;
+            }
+
+            .visual-description {
+                font-size: 13px;
+            }
+
+            .form-panel {
+                padding: 34px 24px 38px;
+            }
+        }
+
+        @media (max-width: 520px) {
+
+            .page {
+                padding: 10px;
+            }
+
+            .auth-shell {
+                border-radius: 20px;
+            }
+
+            .visual-panel {
+                min-height: 325px;
+                padding: 24px 20px;
+            }
+
+            .form-panel {
+                padding: 28px 18px 30px;
+            }
+
+            .visual-title {
+                font-size: 29px;
+            }
+
+            .features {
+                gap: 8px;
+            }
+
+            .feature {
+                padding: 12px;
+            }
+
+            .feature-title {
+                font-size: 11px;
+            }
+
+            .feature-text {
+                font-size: 9px;
+            }
+
+            .visual-footer {
+                margin-top: 25px;
+            }
+
+            .auth-heading h1 {
+                font-size: 25px;
+            }
+
+            .bottom-links {
+                flex-direction: column;
+                align-items: center;
+            }
         }
 
     </style>
-
 </head>
 
 
 <body>
 
-<div class="auth-page">
+    <!-- =========================================================
+         BACKGROUND
+    ========================================================== -->
 
-    <div class="auth-card">
-
-        <div class="auth-logo">
-            ⚛️
-        </div>
-
-        <h1>
-            Physics AI
-        </h1>
-
-        <p class="auth-subtitle">
-            مدرس الفيزياء الذكي
-        </p>
-
-
-        <div class="auth-tabs">
-
-            <button
-                class="auth-tab active"
-                id="loginTab"
-            >
-                تسجيل الدخول
-            </button>
-
-            <button
-                class="auth-tab"
-                id="registerTab"
-            >
-                إنشاء حساب
-            </button>
-
-        </div>
-
-
-        <!-- LOGIN -->
-
-        <form
-            id="loginForm"
-            class="auth-form active"
-        >
-
-            <div class="form-group">
-
-                <label>
-                    البريد الإلكتروني
-                </label>
-
-                <input
-                    id="loginEmail"
-                    type="email"
-                    placeholder="example@email.com"
-                    required
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    كلمة السر
-                </label>
-
-                <input
-                    id="loginPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    required
-                >
-
-            </div>
-
-
-            <button
-                class="auth-button"
-                id="loginButton"
-                type="submit"
-            >
-                تسجيل الدخول
-            </button>
-
-        </form>
-
-
-        <!-- REGISTER -->
-
-        <form
-            id="registerForm"
-            class="auth-form"
-        >
-
-            <div class="form-group">
-
-                <label>
-                    الاسم
-                </label>
-
-                <input
-                    id="registerName"
-                    type="text"
-                    placeholder="اكتب اسمك"
-                    required
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    البريد الإلكتروني
-                </label>
-
-                <input
-                    id="registerEmail"
-                    type="email"
-                    placeholder="example@email.com"
-                    required
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label>
-                    كلمة السر
-                </label>
-
-                <input
-                    id="registerPassword"
-                    type="password"
-                    placeholder="6 أحرف على الأقل"
-                    minlength="6"
-                    required
-                >
-
-            </div>
-
-
-            <button
-                class="auth-button"
-                id="registerButton"
-                type="submit"
-            >
-                إنشاء الحساب
-            </button>
-
-        </form>
-
-
-        <div
-            id="authMessage"
-            class="auth-message"
-        ></div>
-
-
-        <a
-            href="/"
-            class="back-link"
-        >
-            العودة إلى Physics AI
-        </a>
-
+    <div class="page-background">
+        <div class="glow glow-one"></div>
+        <div class="glow glow-two"></div>
+        <div class="grid"></div>
     </div>
 
-</div>
+
+    <!-- =========================================================
+         LOADER
+    ========================================================== -->
+
+    <div
+        class="page-loader"
+        id="pageLoader"
+    >
+        <div class="loader-box">
+            <div class="loader-icon"></div>
+            <div class="loader-text">
+                جاري تجهيز Physics AI
+            </div>
+        </div>
+    </div>
 
 
-<script>
+    <!-- =========================================================
+         PAGE
+    ========================================================== -->
 
-const loginTab =
-    document.getElementById(
-        "loginTab"
-    );
+    <main class="page">
 
-const registerTab =
-    document.getElementById(
-        "registerTab"
-    );
+        <section class="auth-shell">
 
-const loginForm =
-    document.getElementById(
-        "loginForm"
-    );
+            <!-- =====================================================
+                 VISUAL PANEL
+            ====================================================== -->
 
-const registerForm =
-    document.getElementById(
-        "registerForm"
-    );
+            <aside class="visual-panel">
 
-const authMessage =
-    document.getElementById(
-        "authMessage"
-    );
+                <div class="brand-mini">
 
+                    <div class="brand-mark">
+                        P
+                    </div>
 
-loginTab.addEventListener(
-    "click",
-    function () {
+                    <div class="brand-copy">
 
-        loginTab.classList.add(
-            "active"
-        );
+                        <div class="brand-name">
+                            Physics AI
+                        </div>
 
-        registerTab.classList.remove(
-            "active"
-        );
+                        <div class="brand-subtitle">
+                            مدرس الفيزياء الذكي
+                        </div>
 
-        loginForm.classList.add(
-            "active"
-        );
+                    </div>
 
-        registerForm.classList.remove(
-            "active"
-        );
-
-        authMessage.textContent =
-            "";
-
-    }
-);
+                </div>
 
 
-registerTab.addEventListener(
-    "click",
-    function () {
+                <div class="visual-content">
 
-        registerTab.classList.add(
-            "active"
-        );
+                    <div class="eyebrow">
+                        <span class="eyebrow-dot"></span>
+                        منصة تعلم الفيزياء
+                    </div>
 
-        loginTab.classList.remove(
-            "active"
-        );
+                    <h2 class="visual-title">
+                        الفيزياء
+                        <span class="highlight">
+                            بشكل أبسط.
+                        </span>
+                    </h2>
 
-        registerForm.classList.add(
-            "active"
-        );
-
-        loginForm.classList.remove(
-            "active"
-        );
-
-        authMessage.textContent =
-            "";
-
-    }
-);
+                    <p class="visual-description">
+                        ادخل إلى حسابك واستكمل رحلتك التعليمية مع
+                        مدرس فيزياء ذكي يساعدك على الفهم والحل
+                        خطوة بخطوة.
+                    </p>
 
 
-/* LOGIN */
+                    <div class="features">
 
-loginForm.addEventListener(
-    "submit",
-    async function (event) {
+                        <div class="feature">
+                            <div class="feature-title">
+                                شرح ذكي
+                            </div>
 
-        event.preventDefault();
+                            <div class="feature-text">
+                                شرح مبسط مناسب لمستواك الدراسي.
+                            </div>
+                        </div>
 
-        const button =
-            document.getElementById(
-                "loginButton"
+
+                        <div class="feature">
+                            <div class="feature-title">
+                                حل المسائل
+                            </div>
+
+                            <div class="feature-text">
+                                حل منظم من المعطيات حتى الإجابة.
+                            </div>
+                        </div>
+
+
+                        <div class="feature">
+                            <div class="feature-title">
+                                محادثات محفوظة
+                            </div>
+
+                            <div class="feature-text">
+                                احتفظ بمحادثاتك وارجع لها في أي وقت.
+                            </div>
+                        </div>
+
+
+                        <div class="feature">
+                            <div class="feature-title">
+                                منهجك الدراسي
+                            </div>
+
+                            <div class="feature-text">
+                                ابدأ مباشرة من الوحدة والدرس المناسب.
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="visual-footer">
+
+                    <span>
+                        Physics AI
+                    </span>
+
+                    <div class="physics-symbols">
+
+                        <div class="symbol">
+                            F=ma
+                        </div>
+
+                        <div class="symbol">
+                            λ
+                        </div>
+
+                        <div class="symbol">
+                            E=mc²
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </aside>
+
+
+            <!-- =====================================================
+                 FORM PANEL
+            ====================================================== -->
+
+            <section class="form-panel">
+
+                <div class="auth-box">
+
+                    <div class="auth-heading">
+
+                        <h1 id="authTitle">
+                            أهلاً بيك
+                        </h1>
+
+                        <p id="authSubtitle">
+                            سجّل دخولك للوصول إلى حسابك ومتابعة دراستك.
+                        </p>
+
+                    </div>
+
+
+                    <!-- =================================================
+                         TABS
+                    ================================================== -->
+
+                    <div class="tabs">
+
+                        <button
+                            type="button"
+                            class="tab active"
+                            id="loginTab"
+                        >
+                            تسجيل الدخول
+                        </button>
+
+                        <button
+                            type="button"
+                            class="tab"
+                            id="registerTab"
+                        >
+                            إنشاء حساب
+                        </button>
+
+                    </div>
+
+
+                    <!-- =================================================
+                         LOGIN FORM
+                    ================================================== -->
+
+                    <form
+                        class="form active"
+                        id="loginForm"
+                        autocomplete="on"
+                    >
+
+                        <div class="field">
+
+                            <label for="loginEmail">
+                                البريد الإلكتروني
+                            </label>
+
+                            <div class="input-wrap">
+
+                                <span class="input-icon">
+                                    @
+                                </span>
+
+                                <input
+                                    id="loginEmail"
+                                    type="email"
+                                    name="email"
+                                    placeholder="example@email.com"
+                                    autocomplete="email"
+                                    required
+                                >
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="field">
+
+                            <label for="loginPassword">
+                                كلمة السر
+                            </label>
+
+                            <div class="input-wrap">
+
+                                <span class="input-icon">
+                                    ••
+                                </span>
+
+                                <input
+                                    id="loginPassword"
+                                    type="password"
+                                    name="password"
+                                    placeholder="اكتب كلمة السر"
+                                    autocomplete="current-password"
+                                    required
+                                >
+
+                                <button
+                                    type="button"
+                                    class="password-toggle"
+                                    data-target="loginPassword"
+                                    aria-label="إظهار كلمة السر"
+                                >
+                                    إظهار
+                                </button>
+
+                            </div>
+
+                        </div>
+
+
+                        <button
+                            class="submit-button"
+                            id="loginButton"
+                            type="submit"
+                        >
+                            تسجيل الدخول
+                        </button>
+
+                    </form>
+
+
+                    <!-- =================================================
+                         REGISTER FORM
+                    ================================================== -->
+
+                    <form
+                        class="form"
+                        id="registerForm"
+                        autocomplete="on"
+                    >
+
+                        <div class="field">
+
+                            <label for="registerName">
+                                الاسم
+                            </label>
+
+                            <div class="input-wrap">
+
+                                <span class="input-icon">
+                                    N
+                                </span>
+
+                                <input
+                                    id="registerName"
+                                    type="text"
+                                    name="name"
+                                    placeholder="اكتب اسمك"
+                                    autocomplete="name"
+                                    required
+                                >
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="field">
+
+                            <label for="registerEmail">
+                                البريد الإلكتروني
+                            </label>
+
+                            <div class="input-wrap">
+
+                                <span class="input-icon">
+                                    @
+                                </span>
+
+                                <input
+                                    id="registerEmail"
+                                    type="email"
+                                    name="email"
+                                    placeholder="example@email.com"
+                                    autocomplete="email"
+                                    required
+                                >
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="field">
+
+                            <label for="registerPassword">
+                                كلمة السر
+                            </label>
+
+                            <div class="input-wrap">
+
+                                <span class="input-icon">
+                                    ••
+                                </span>
+
+                                <input
+                                    id="registerPassword"
+                                    type="password"
+                                    name="password"
+                                    placeholder="6 أحرف على الأقل"
+                                    minlength="6"
+                                    autocomplete="new-password"
+                                    required
+                                >
+
+                                <button
+                                    type="button"
+                                    class="password-toggle"
+                                    data-target="registerPassword"
+                                    aria-label="إظهار كلمة السر"
+                                >
+                                    إظهار
+                                </button>
+
+                            </div>
+
+                        </div>
+
+
+                        <label class="terms">
+
+                            <input
+                                type="checkbox"
+                                id="termsCheckbox"
+                                required
+                            >
+
+                            <span>
+                                أوافق على استخدام المنصة وإنشاء حساب
+                                للوصول إلى خدمات Physics AI.
+                            </span>
+
+                        </label>
+
+
+                        <button
+                            class="submit-button"
+                            id="registerButton"
+                            type="submit"
+                        >
+                            إنشاء الحساب
+                        </button>
+
+                    </form>
+
+
+                    <!-- =================================================
+                         MESSAGE
+                    ================================================== -->
+
+                    <div
+                        id="authMessage"
+                        class="message"
+                    ></div>
+
+
+                    <!-- =================================================
+                         FOOTER LINKS
+                    ================================================== -->
+
+                    <div class="bottom-links">
+
+                        <a
+                            href="/"
+                            class="back-link"
+                        >
+                            ← العودة للرئيسية
+                        </a>
+
+                        <span class="secure-note">
+                            حسابك محمي بجلسة آمنة
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </section>
+
+    </main>
+
+
+    <script>
+
+        /* =========================================================
+           DOM
+        ========================================================= */
+
+        const pageLoader =
+            document.getElementById("pageLoader");
+
+        const loginTab =
+            document.getElementById("loginTab");
+
+        const registerTab =
+            document.getElementById("registerTab");
+
+        const loginForm =
+            document.getElementById("loginForm");
+
+        const registerForm =
+            document.getElementById("registerForm");
+
+        const authMessage =
+            document.getElementById("authMessage");
+
+        const authTitle =
+            document.getElementById("authTitle");
+
+        const authSubtitle =
+            document.getElementById("authSubtitle");
+
+        const loginButton =
+            document.getElementById("loginButton");
+
+        const registerButton =
+            document.getElementById("registerButton");
+
+
+        /* =========================================================
+           PAGE LOADER
+        ========================================================= */
+
+        function hideLoader() {
+            setTimeout(() => {
+                pageLoader.classList.add("hidden");
+            }, 180);
+        }
+
+
+        /* =========================================================
+           MESSAGE
+        ========================================================= */
+
+        function showMessage(
+            message,
+            type = "error"
+        ) {
+
+            authMessage.textContent = message;
+
+            authMessage.classList.remove(
+                "success"
             );
 
-        button.disabled = true;
+            if (type === "success") {
+                authMessage.classList.add(
+                    "success"
+                );
+            }
 
-        button.textContent =
-            "جاري تسجيل الدخول...";
+        }
 
 
-        try {
+        function clearMessage() {
 
-            const response =
-                await fetch(
-                    "/api/auth/login",
-                    {
-                        method: "POST",
+            authMessage.textContent = "";
 
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
+            authMessage.classList.remove(
+                "success"
+            );
 
-                        body: JSON.stringify({
+        }
 
-                            email:
-                                document
-                                    .getElementById(
-                                        "loginEmail"
-                                    )
-                                    .value,
 
-                            password:
-                                document
-                                    .getElementById(
-                                        "loginPassword"
-                                    )
-                                    .value
+        /* =========================================================
+           SWITCH TABS
+        ========================================================= */
 
-                        })
+        function showLogin() {
+
+            loginTab.classList.add("active");
+            registerTab.classList.remove("active");
+
+            loginForm.classList.add("active");
+            registerForm.classList.remove("active");
+
+            authTitle.textContent =
+                "أهلاً بيك";
+
+            authSubtitle.textContent =
+                "سجّل دخولك للوصول إلى حسابك ومتابعة دراستك.";
+
+            clearMessage();
+
+        }
+
+
+        function showRegister() {
+
+            registerTab.classList.add("active");
+            loginTab.classList.remove("active");
+
+            registerForm.classList.add("active");
+            loginForm.classList.remove("active");
+
+            authTitle.textContent =
+                "ابدأ رحلتك";
+
+            authSubtitle.textContent =
+                "أنشئ حسابك وابدأ دراسة الفيزياء بطريقة أذكى.";
+
+            clearMessage();
+
+        }
+
+
+        loginTab.addEventListener(
+            "click",
+            showLogin
+        );
+
+
+        registerTab.addEventListener(
+            "click",
+            showRegister
+        );
+
+
+        /* =========================================================
+           PASSWORD VISIBILITY
+        ========================================================= */
+
+        document
+            .querySelectorAll(".password-toggle")
+            .forEach(button => {
+
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        const targetId =
+                            button.dataset.target;
+
+                        const input =
+                            document.getElementById(
+                                targetId
+                            );
+
+                        if (!input) {
+                            return;
+                        }
+
+                        if (
+                            input.type ===
+                            "password"
+                        ) {
+
+                            input.type =
+                                "text";
+
+                            button.textContent =
+                                "إخفاء";
+
+                            button.setAttribute(
+                                "aria-label",
+                                "إخفاء كلمة السر"
+                            );
+
+                        } else {
+
+                            input.type =
+                                "password";
+
+                            button.textContent =
+                                "إظهار";
+
+                            button.setAttribute(
+                                "aria-label",
+                                "إظهار كلمة السر"
+                            );
+
+                        }
+
                     }
                 );
 
-
-            const data =
-                await response.json();
+            });
 
 
-            if (!response.ok) {
+        /* =========================================================
+           CHECK EXISTING SESSION
+        ========================================================= */
 
-                throw new Error(
-                    data.error ||
-                    "حدث خطأ."
+        async function checkExistingSession() {
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api/auth/me",
+                        {
+                            credentials: "same-origin"
+                        }
+                    );
+
+                if (!response.ok) {
+                    hideLoader();
+                    return;
+                }
+
+                const data =
+                    await response.json();
+
+                if (
+                    data &&
+                    data.user
+                ) {
+
+                    window.location.replace(
+                        "/chat.html"
+                    );
+
+                    return;
+                }
+
+            } catch (error) {
+
+                console.warn(
+                    "Session check failed:",
+                    error
                 );
 
             }
 
-
-            window.location.href =
-                "/study.html";
-
-
-        } catch (error) {
-
-            authMessage.textContent =
-                error.message;
-
-        } finally {
-
-            button.disabled =
-                false;
-
-            button.textContent =
-                "تسجيل الدخول";
+            hideLoader();
 
         }
 
-    }
-);
+
+        /* =========================================================
+           LOGIN
+        ========================================================= */
+
+        loginForm.addEventListener(
+            "submit",
+            async function (event) {
+
+                event.preventDefault();
+
+                clearMessage();
+
+                const email =
+                    document
+                        .getElementById("loginEmail")
+                        .value
+                        .trim();
+
+                const password =
+                    document
+                        .getElementById("loginPassword")
+                        .value;
 
 
-/* REGISTER */
+                if (!email || !password) {
 
-registerForm.addEventListener(
-    "submit",
-    async function (event) {
+                    showMessage(
+                        "من فضلك املأ كل البيانات."
+                    );
 
-        event.preventDefault();
-
-        const button =
-            document.getElementById(
-                "registerButton"
-            );
-
-        button.disabled = true;
-
-        button.textContent =
-            "جاري إنشاء الحساب...";
+                    return;
+                }
 
 
-        try {
+                loginButton.disabled = true;
 
-            const response =
-                await fetch(
-                    "/api/auth/register",
-                    {
-                        method: "POST",
+                loginButton.textContent =
+                    "جاري تسجيل الدخول...";
 
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
 
-                        body: JSON.stringify({
+                try {
 
-                            name:
-                                document
-                                    .getElementById(
-                                        "registerName"
-                                    )
-                                    .value,
+                    const response =
+                        await fetch(
+                            "/api/auth/login",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type":
+                                        "application/json"
+                                },
+                                credentials:
+                                    "same-origin",
+                                body:
+                                    JSON.stringify({
+                                        email,
+                                        password
+                                    })
+                            }
+                        );
 
-                            email:
-                                document
-                                    .getElementById(
-                                        "registerEmail"
-                                    )
-                                    .value,
 
-                            password:
-                                document
-                                    .getElementById(
-                                        "registerPassword"
-                                    )
-                                    .value
+                    let data = {};
 
-                        })
+                    try {
+                        data =
+                            await response.json();
+                    } catch {
+                        data = {};
+                    }
+
+
+                    if (!response.ok) {
+
+                        throw new Error(
+                            data.error ||
+                            "بيانات تسجيل الدخول غير صحيحة."
+                        );
+
+                    }
+
+
+                    showMessage(
+                        "تم تسجيل الدخول بنجاح...",
+                        "success"
+                    );
+
+
+                    setTimeout(() => {
+
+                        window.location.replace(
+                            "/chat.html"
+                        );
+
+                    }, 250);
+
+
+                } catch (error) {
+
+                    showMessage(
+                        error.message ||
+                        "حدث خطأ أثناء تسجيل الدخول."
+                    );
+
+                } finally {
+
+                    loginButton.disabled =
+                        false;
+
+                    loginButton.textContent =
+                        "تسجيل الدخول";
+
+                }
+
+            }
+        );
+
+
+        /* =========================================================
+           REGISTER
+        ========================================================= */
+
+        registerForm.addEventListener(
+            "submit",
+            async function (event) {
+
+                event.preventDefault();
+
+                clearMessage();
+
+                const name =
+                    document
+                        .getElementById("registerName")
+                        .value
+                        .trim();
+
+                const email =
+                    document
+                        .getElementById("registerEmail")
+                        .value
+                        .trim();
+
+                const password =
+                    document
+                        .getElementById("registerPassword")
+                        .value;
+
+
+                if (!name || !email || !password) {
+
+                    showMessage(
+                        "من فضلك املأ كل البيانات."
+                    );
+
+                    return;
+                }
+
+
+                if (password.length < 6) {
+
+                    showMessage(
+                        "كلمة السر يجب أن تكون 6 أحرف على الأقل."
+                    );
+
+                    return;
+                }
+
+
+                registerButton.disabled =
+                    true;
+
+                registerButton.textContent =
+                    "جاري إنشاء الحساب...";
+
+
+                try {
+
+                    const response =
+                        await fetch(
+                            "/api/auth/register",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type":
+                                        "application/json"
+                                },
+                                credentials:
+                                    "same-origin",
+                                body:
+                                    JSON.stringify({
+                                        name,
+                                        email,
+                                        password
+                                    })
+                            }
+                        );
+
+
+                    let data = {};
+
+                    try {
+                        data =
+                            await response.json();
+                    } catch {
+                        data = {};
+                    }
+
+
+                    if (!response.ok) {
+
+                        throw new Error(
+                            data.error ||
+                            "تعذر إنشاء الحساب."
+                        );
+
+                    }
+
+
+                    showMessage(
+                        "تم إنشاء الحساب بنجاح...",
+                        "success"
+                    );
+
+
+                    setTimeout(() => {
+
+                        window.location.replace(
+                            "/chat.html"
+                        );
+
+                    }, 250);
+
+
+                } catch (error) {
+
+                    showMessage(
+                        error.message ||
+                        "حدث خطأ أثناء إنشاء الحساب."
+                    );
+
+                } finally {
+
+                    registerButton.disabled =
+                        false;
+
+                    registerButton.textContent =
+                        "إنشاء الحساب";
+
+                }
+
+            }
+        );
+
+
+        /* =========================================================
+           ENTER TO SUBMIT
+        ========================================================= */
+
+        document
+            .querySelectorAll(
+                "#loginForm input, #registerForm input"
+            )
+            .forEach(input => {
+
+                input.addEventListener(
+                    "keydown",
+                    event => {
+
+                        if (
+                            event.key ===
+                            "Enter"
+                        ) {
+
+                            const form =
+                                input.closest("form");
+
+                            if (form) {
+
+                                event.preventDefault();
+
+                                form.requestSubmit();
+
+                            }
+
+                        }
+
                     }
                 );
 
-
-            const data =
-                await response.json();
+            });
 
 
-            if (!response.ok) {
+        /* =========================================================
+           INIT
+        ========================================================= */
 
-                throw new Error(
-                    data.error ||
-                    "حدث خطأ."
-                );
+        checkExistingSession();
 
-            }
-
-
-            window.location.href =
-                "/study.html";
-
-
-        } catch (error) {
-
-            authMessage.textContent =
-                error.message;
-
-        } finally {
-
-            button.disabled =
-                false;
-
-            button.textContent =
-                "إنشاء الحساب";
-
-        }
-
-    }
-);
-
-</script>
+    </script>
 
 </body>
 
