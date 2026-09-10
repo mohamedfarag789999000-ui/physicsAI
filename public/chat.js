@@ -1,627 +1,865 @@
-const messageInput =
-    document.getElementById(
-        "messageInput"
+"use strict";
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    /* =========================================================
+       ELEMENTS
+    ========================================================= */
+
+    const messageInput =
+        document.getElementById("messageInput");
+
+    const sendButton =
+        document.getElementById("sendButton");
+
+    const chat =
+        document.getElementById("chat");
+
+    const sidebar =
+        document.getElementById("sidebar");
+
+    const sidebarButton =
+        document.getElementById("sidebarButton");
+
+    const themeButton =
+        document.getElementById("themeButton");
+
+    const newChatButton =
+        document.getElementById("newChatButton");
+
+    const conversationList =
+        document.getElementById("conversationList");
+
+    const logoutButton =
+        document.getElementById("logoutButton");
+
+    const userName =
+        document.getElementById("userName");
+
+    const gradeSelect =
+        document.getElementById("grade");
+
+    const subjectSelect =
+        document.getElementById("subject");
+
+    const unitSelect =
+        document.getElementById("unit");
+
+    const lessonSelect =
+        document.getElementById("lesson");
+
+    const uploadButton =
+        document.getElementById("uploadButton");
+
+    const cameraButton =
+        document.getElementById("cameraButton");
+
+    const voiceButton =
+        document.getElementById("voiceButton");
+
+    const imageInput =
+        document.getElementById("imageInput");
+
+    const cameraInput =
+        document.getElementById("cameraInput");
+
+    const imagePreview =
+        document.getElementById("imagePreview");
+
+    const previewImage =
+        document.getElementById("previewImage");
+
+    const removeImageButton =
+        document.getElementById("removeImageButton");
+
+    const voiceStatus =
+        document.getElementById("voiceStatus");
+
+    const cameraModal =
+        document.getElementById("cameraModal");
+
+    const cameraVideo =
+        document.getElementById("cameraVideo");
+
+    const cameraCanvas =
+        document.getElementById("cameraCanvas");
+
+    const closeCameraButton =
+        document.getElementById("closeCameraButton");
+
+    const takePhotoButton =
+        document.getElementById("takePhotoButton");
+
+    const cameraError =
+        document.getElementById("cameraError");
+
+    const lessonName =
+        document.getElementById("lessonName");
+
+    const lessonDescription =
+        document.getElementById("lessonDescription");
+
+
+    /* =========================================================
+       REQUIRED ELEMENTS
+    ========================================================= */
+
+    if (
+        !messageInput ||
+        !sendButton ||
+        !chat
+    ) {
+        console.error(
+            "Physics AI: العناصر الأساسية للشات غير موجودة."
+        );
+
+        return;
+    }
+
+
+    /* =========================================================
+       STATE
+    ========================================================= */
+
+    let currentUser = null;
+
+    let currentConversationId = null;
+
+    let conversationHistory = [];
+
+    let selectedImage = null;
+
+    let cameraStream = null;
+
+    let mediaRecorder = null;
+
+    let recordingStream = null;
+
+    let recordedChunks = [];
+
+    let isRecording = false;
+
+    let isSending = false;
+
+
+    /* =========================================================
+       CURRICULUM
+    ========================================================= */
+
+    const curriculum = {
+
+        "الصف الثالث الثانوي العام": {
+
+            units: [
+
+                {
+                    title:
+                        "الوحدة الأولى: الكهربية التيارية والكهرومغناطيسية",
+
+                    lessons: [
+                        "التيار الكهربي وشدة التيار",
+                        "فرق الجهد والقوة الدافعة الكهربية",
+                        "المقاومة الكهربية",
+                        "المقاومة النوعية والتوصيلية",
+                        "توصيل المقاومات على التوالي",
+                        "توصيل المقاومات على التوازي",
+                        "قانون أوم",
+                        "قانون أوم للدائرة المغلقة",
+                        "قانون كيرتشوف الأول",
+                        "قانون كيرتشوف الثاني",
+                        "التأثير المغناطيسي للتيار الكهربي",
+                        "الحث الكهرومغناطيسي",
+                        "دوائر التيار المتردد"
+                    ]
+                },
+
+                {
+                    title:
+                        "الوحدة الثانية: مقدمة في الفيزياء الحديثة",
+
+                    lessons: [
+                        "ازدواجية الموجة والجسيم",
+                        "الأطياف الذرية",
+                        "الليزر",
+                        "الإلكترونيات الحديثة"
+                    ]
+                }
+            ]
+        },
+
+        "الصف الثاني بكالوريا": {
+
+            units: [
+
+                {
+                    title:
+                        "المحتوى الرسمي قيد الإضافة",
+
+                    lessons: [
+                        "سيتم إضافة المنهج الرسمي"
+                    ]
+                }
+            ]
+        }
+    };
+
+
+    /* =========================================================
+       THEME
+    ========================================================= */
+
+    function getTheme() {
+
+        return (
+            localStorage.getItem(
+                "physicsai-theme"
+            ) || "dark"
+        );
+    }
+
+
+    function applyTheme(theme) {
+
+        const isLight =
+            theme === "light";
+
+        document.body.classList.toggle(
+            "light",
+            isLight
+        );
+
+        if (themeButton) {
+
+            themeButton.textContent =
+                isLight
+                    ? "☾"
+                    : "☀";
+
+            themeButton.title =
+                isLight
+                    ? "الوضع الليلي"
+                    : "الوضع النهاري";
+        }
+
+        const metaTheme =
+            document.querySelector(
+                'meta[name="theme-color"]'
+            );
+
+        if (metaTheme) {
+
+            metaTheme.setAttribute(
+                "content",
+
+                isLight
+                    ? "#f7f8fb"
+                    : "#0b0e13"
+            );
+        }
+    }
+
+
+    applyTheme(
+        getTheme()
     );
 
-const sendButton =
-    document.getElementById(
-        "sendButton"
-    );
 
-const chat =
-    document.getElementById(
-        "chat"
-    );
+    themeButton?.addEventListener(
+        "click",
+        () => {
 
-const userName =
-    document.getElementById(
-        "userName"
-    );
+            const current =
+                getTheme();
 
-const logoutButton =
-    document.getElementById(
-        "logoutButton"
-    );
+            const next =
+                current === "light"
+                    ? "dark"
+                    : "light";
 
-const conversationList =
-    document.getElementById(
-        "conversationList"
-    );
+            localStorage.setItem(
+                "physicsai-theme",
+                next
+            );
 
-const newChatButton =
-    document.getElementById(
-        "newChatButton"
-    );
-
-const uploadButton =
-    document.getElementById(
-        "uploadButton"
-    );
-
-const cameraButton =
-    document.getElementById(
-        "cameraButton"
-    );
-
-const voiceButton =
-    document.getElementById(
-        "voiceButton"
-    );
-
-const imageInput =
-    document.getElementById(
-        "imageInput"
-    );
-
-const cameraInput =
-    document.getElementById(
-        "cameraInput"
-    );
-
-const imagePreview =
-    document.getElementById(
-        "imagePreview"
-    );
-
-const previewImage =
-    document.getElementById(
-        "previewImage"
-    );
-
-const removeImageButton =
-    document.getElementById(
-        "removeImageButton"
-    );
-
-const voiceStatus =
-    document.getElementById(
-        "voiceStatus"
-    );
-
-const cameraModal =
-    document.getElementById(
-        "cameraModal"
-    );
-
-const cameraVideo =
-    document.getElementById(
-        "cameraVideo"
-    );
-
-const cameraCanvas =
-    document.getElementById(
-        "cameraCanvas"
-    );
-
-const takePhotoButton =
-    document.getElementById(
-        "takePhotoButton"
-    );
-
-const closeCameraButton =
-    document.getElementById(
-        "closeCameraButton"
-    );
-
-const cameraError =
-    document.getElementById(
-        "cameraError"
+            applyTheme(
+                next
+            );
+        }
     );
 
 
-let conversationHistory = [];
+    /* =========================================================
+       SIDEBAR
+    ========================================================= */
 
-let currentConversationId =
-    null;
+    function isMobile() {
 
-let selectedImage =
-    null;
-
-let mediaRecorder =
-    null;
-
-let audioChunks =
-    [];
-
-let cameraStream =
-    null;
+        return (
+            window.innerWidth <= 900
+        );
+    }
 
 
-/* =========================================================
-   URL PARAMS
-========================================================= */
+    function closeMobileSidebar() {
 
-const params =
-    new URLSearchParams(
-        window.location.search
+        sidebar?.classList.remove(
+            "mobile-open"
+        );
+
+        document
+            .getElementById("mobileOverlay")
+            ?.classList.remove("show");
+    }
+
+
+    function openMobileSidebar() {
+
+        sidebar?.classList.add(
+            "mobile-open"
+        );
+
+        document
+            .getElementById("mobileOverlay")
+            ?.classList.add("show");
+    }
+
+
+    sidebarButton?.addEventListener(
+        "click",
+        () => {
+
+            if (!sidebar) {
+                return;
+            }
+
+            if (isMobile()) {
+
+                const opened =
+                    sidebar.classList.toggle(
+                        "mobile-open"
+                    );
+
+                document
+                    .getElementById(
+                        "mobileOverlay"
+                    )
+                    ?.classList.toggle(
+                        "show",
+                        opened
+                    );
+
+            } else {
+
+                sidebar.classList.toggle(
+                    "collapsed"
+                );
+            }
+        }
     );
 
-const mode =
-    params.get("mode") ||
-    "general";
 
-const grade =
-    params.get("grade") ||
-    "";
-
-const subject =
-    params.get("subject") ||
-    "الفيزياء";
-
-const unit =
-    params.get("unit") ||
-    "";
-
-const lesson =
-    params.get("lesson") ||
-    "";
-
-const description =
-    params.get("description") ||
-    "";
+    document
+        .getElementById("mobileOverlay")
+        ?.addEventListener(
+            "click",
+            closeMobileSidebar
+        );
 
 
-/* =========================================================
-   LESSON UI
-========================================================= */
+    window.addEventListener(
+        "resize",
+        () => {
 
-document.getElementById(
-    "chatMode"
-).textContent =
-    mode === "encyclopedia"
-        ? "🌌 موسوعة الفيزياء"
-        : "📚 المنهج";
+            if (!isMobile()) {
 
+                sidebar?.classList.remove(
+                    "mobile-open"
+                );
 
-document.getElementById(
-    "lessonName"
-).textContent =
-    lesson ||
-    "دردشة عامة";
-
-
-document.getElementById(
-    "lessonDescription"
-).textContent =
-    description ||
-    "اسأل Physics AI عن الفيزياء.";
+                document
+                    .getElementById(
+                        "mobileOverlay"
+                    )
+                    ?.classList.remove(
+                        "show"
+                    );
+            }
+        }
+    );
 
 
-/* =========================================================
-   AUTH
-========================================================= */
+    /* =========================================================
+       TEXTAREA
+    ========================================================= */
 
-async function loadUser() {
+    function resizeInput() {
 
-    try {
+        messageInput.style.height =
+            "auto";
+
+        messageInput.style.height =
+            Math.min(
+                messageInput.scrollHeight,
+                160
+            ) + "px";
+    }
+
+
+    messageInput.addEventListener(
+        "input",
+        resizeInput
+    );
+
+
+    messageInput.addEventListener(
+        "keydown",
+        event => {
+
+            if (
+                event.key === "Enter" &&
+                !event.shiftKey
+            ) {
+
+                event.preventDefault();
+
+                sendMessage();
+            }
+        }
+    );
+
+
+    /* =========================================================
+       SEND BUTTON
+       الإصلاح الأساسي
+    ========================================================= */
+
+    sendButton.addEventListener(
+        "click",
+        () => {
+
+            sendMessage();
+        }
+    );
+
+
+    /* =========================================================
+       CURRENT USER
+    ========================================================= */
+
+    async function loadUser() {
 
         const response =
             await fetch(
-                "/api/auth/me"
+                "/api/auth/me",
+                {
+                    credentials:
+                        "include"
+                }
             );
 
-        const data =
-            await response.json();
+        let data;
 
+        try {
 
-        if (
-            !data.loggedIn
-        ) {
+            data =
+                await response.json();
+
+        } catch {
+
+            throw new Error(
+                "تعذر قراءة بيانات الحساب."
+            );
+        }
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                "تعذر التحقق من الحساب."
+            );
+        }
+
+        if (!data.loggedIn) {
 
             window.location.href =
                 "/login.html";
 
             return false;
-
         }
 
+        currentUser =
+            data.user;
 
-        userName.textContent =
-            data.user.name;
+        if (userName) {
 
+            userName.textContent =
+                currentUser.name ||
+                "";
+        }
 
         return true;
-
-
-    } catch (error) {
-
-        console.error(
-            error
-        );
-
-        return false;
-
     }
 
-}
 
+    /* =========================================================
+       CONVERSATIONS
+    ========================================================= */
 
-/* =========================================================
-   LOAD CONVERSATIONS
-========================================================= */
+    async function loadConversations() {
 
-async function loadConversations() {
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/conversations"
-            );
-
-
-        if (
-            response.status === 401
-        ) {
-
-            window.location.href =
-                "/login.html";
-
+        if (!conversationList) {
             return;
-
         }
 
+        try {
 
-        const data =
-            await response.json();
-
-
-        conversationList.innerHTML =
-            "";
-
-
-        if (
-            !data.conversations ||
-            data.conversations.length === 0
-        ) {
-
-            conversationList.innerHTML =
-                `
-                <div
-                    style="
-                    color:#999;
-                    font-size:12px;
-                    text-align:center;
-                    padding:20px;
-                    "
-                >
-                    مفيش محادثات محفوظة لسه.
-                </div>
-                `;
-
-            return;
-
-        }
-
-
-        data.conversations.forEach(
-            function (conversation) {
-
-                const item =
-                    document.createElement(
-                        "div"
-                    );
-
-                item.className =
-                    "conversation-item";
-
-
-                if (
-                    Number(
-                        conversation.id
-                    ) ===
-                    Number(
-                        currentConversationId
-                    )
-                ) {
-
-                    item.classList.add(
-                        "active"
-                    );
-
-                }
-
-
-                const title =
-                    document.createElement(
-                        "div"
-                    );
-
-                title.className =
-                    "conversation-title";
-
-                title.textContent =
-                    conversation.title;
-
-
-                const deleteButton =
-                    document.createElement(
-                        "button"
-                    );
-
-                deleteButton.className =
-                    "delete-conversation";
-
-                deleteButton.textContent =
-                    "🗑️";
-
-
-                deleteButton.addEventListener(
-                    "click",
-                    async function (event) {
-
-                        event.stopPropagation();
-
-                        await deleteConversation(
-                            conversation.id
-                        );
-
+            const response =
+                await fetch(
+                    "/api/conversations",
+                    {
+                        credentials:
+                            "include"
                     }
                 );
-
-
-                item.appendChild(
-                    title
-                );
-
-                item.appendChild(
-                    deleteButton
-                );
-
-
-                item.addEventListener(
-                    "click",
-                    function () {
-
-                        openConversation(
-                            conversation.id
-                        );
-
-                    }
-                );
-
-
-                conversationList.appendChild(
-                    item
-                );
-
-            }
-        );
-
-
-    } catch (error) {
-
-        console.error(
-            "LOAD CONVERSATIONS:",
-            error
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   CREATE CONVERSATION
-========================================================= */
-
-async function createConversation(
-    title = "محادثة جديدة"
-) {
-
-    const response =
-        await fetch(
-            "/api/conversations",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-
-                body: JSON.stringify({
-                    title
-                })
-            }
-        );
-
-
-    const data =
-        await response.json();
-
-
-    if (!response.ok) {
-
-        throw new Error(
-            data.error ||
-            "تعذر إنشاء المحادثة."
-        );
-
-    }
-
-
-    currentConversationId =
-        data.conversation.id;
-
-
-    conversationHistory =
-        [];
-
-
-    chat.innerHTML =
-        `
-        <div class="welcome">
-
-            <div class="welcome-icon">
-                ⚛️
-            </div>
-
-            <h1>
-                محادثة جديدة 👋
-            </h1>
-
-            <p>
-                اسأل Physics AI عن الفيزياء.
-            </p>
-
-        </div>
-        `;
-
-
-    await loadConversations();
-
-}
-
-
-/* =========================================================
-   OPEN CONVERSATION
-========================================================= */
-
-async function openConversation(
-    conversationId
-) {
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/conversations/${conversationId}`
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.error ||
-                "تعذر تحميل المحادثة."
-            );
-
-        }
-
-
-        currentConversationId =
-            conversationId;
-
-
-        conversationHistory =
-            data.messages
-                .map(
-                    function (message) {
-
-                        return {
-
-                            role:
-                                message.role,
-
-                            content:
-                                message.content
-
-                        };
-
-                    }
-                );
-
-
-        chat.innerHTML =
-            "";
-
-
-        data.messages.forEach(
-            function (message) {
-
-                addMessageToUI(
-                    message.content,
-                    message.role ===
-                        "user"
-                        ? "user"
-                        : "bot",
-                    message.image
-                );
-
-            }
-        );
-
-
-        await loadConversations();
-
-
-    } catch (error) {
-
-        console.error(
-            error
-        );
-
-        alert(
-            error.message
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   DELETE CONVERSATION
-========================================================= */
-
-async function deleteConversation(
-    conversationId
-) {
-
-    const confirmed =
-        confirm(
-            "تحب تحذف المحادثة دي؟"
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/conversations/${conversationId}`,
-                {
-                    method: "DELETE"
-                }
-            );
-
-
-        if (!response.ok) {
 
             const data =
                 await response.json();
 
-            throw new Error(
-                data.error ||
-                "تعذر الحذف."
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "تعذر تحميل المحادثات."
+                );
+            }
+
+            conversationList.innerHTML =
+                "";
+
+            const conversations =
+                Array.isArray(
+                    data.conversations
+                )
+                    ? data.conversations
+                    : [];
+
+            conversations.forEach(
+                conversation => {
+
+                    const button =
+                        document.createElement(
+                            "button"
+                        );
+
+                    button.type =
+                        "button";
+
+                    button.className =
+                        "conversation-item";
+
+                    button.dataset.id =
+                        conversation.id;
+
+                    const title =
+                        document.createElement(
+                            "div"
+                        );
+
+                    title.className =
+                        "conversation-item-title";
+
+                    title.textContent =
+                        conversation.title ||
+                        "محادثة جديدة";
+
+                    const date =
+                        document.createElement(
+                            "div"
+                        );
+
+                    date.className =
+                        "conversation-item-date";
+
+                    date.textContent =
+                        formatDate(
+                            conversation.updated_at
+                        );
+
+                    button.appendChild(
+                        title
+                    );
+
+                    button.appendChild(
+                        date
+                    );
+
+                    button.addEventListener(
+                        "click",
+                        async () => {
+
+                            await loadConversation(
+                                Number(
+                                    conversation.id
+                                )
+                            );
+
+                            closeMobileSidebar();
+                        }
+                    );
+
+                    conversationList.appendChild(
+                        button
+                    );
+                }
             );
 
+            highlightConversation();
+
+        } catch (error) {
+
+            console.error(
+                "CONVERSATIONS ERROR:",
+                error
+            );
+        }
+    }
+
+
+    function formatDate(value) {
+
+        if (!value) {
+            return "";
         }
 
+        const date =
+            new Date(value);
 
         if (
-            Number(
-                currentConversationId
-            ) ===
-            Number(
-                conversationId
+            Number.isNaN(
+                date.getTime()
             )
         ) {
+            return "";
+        }
+
+        return date.toLocaleDateString(
+            "ar-EG",
+            {
+                day: "numeric",
+                month: "short"
+            }
+        );
+    }
+
+
+    function highlightConversation() {
+
+        document
+            .querySelectorAll(
+                ".conversation-item"
+            )
+            .forEach(
+                item => {
+
+                    item.classList.toggle(
+                        "active",
+
+                        Number(
+                            item.dataset.id
+                        ) ===
+                        Number(
+                            currentConversationId
+                        )
+                    );
+                }
+            );
+    }
+
+
+    /* =========================================================
+       CREATE CONVERSATION
+    ========================================================= */
+
+    async function createConversation(
+        title
+    ) {
+
+        const response =
+            await fetch(
+                "/api/conversations",
+                {
+                    method:
+                        "POST",
+
+                    credentials:
+                        "include",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            title:
+                                title ||
+                                "محادثة جديدة"
+                        })
+                }
+            );
+
+        let data;
+
+        try {
+
+            data =
+                await response.json();
+
+        } catch {
+
+            throw new Error(
+                "السيرفر لم يرجع استجابة صحيحة."
+            );
+        }
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                "تعذر إنشاء المحادثة."
+            );
+        }
+
+        currentConversationId =
+            Number(
+                data.conversation.id
+            );
+
+        await loadConversations();
+    }
+
+
+    /* =========================================================
+       LOAD CONVERSATION
+    ========================================================= */
+
+    async function loadConversation(
+        id
+    ) {
+
+        try {
+
+            const response =
+                await fetch(
+                    `/api/conversations/${id}`,
+                    {
+                        credentials:
+                            "include"
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "تعذر تحميل المحادثة."
+                );
+            }
+
+            currentConversationId =
+                Number(
+                    data.conversation.id
+                );
+
+            conversationHistory =
+                [];
+
+            chat.innerHTML =
+                "";
+
+            const titleElement =
+                document.getElementById(
+                    "chatTitle"
+                );
+
+            if (titleElement) {
+
+                titleElement.textContent =
+                    data.conversation.title ||
+                    "Physics AI";
+            }
+
+            const messages =
+                Array.isArray(
+                    data.messages
+                )
+                    ? data.messages
+                    : [];
+
+            messages.forEach(
+                message => {
+
+                    conversationHistory.push({
+                        role:
+                            message.role,
+
+                        content:
+                            message.content
+                    });
+
+                    addMessage(
+                        message.content,
+
+                        message.role ===
+                            "assistant"
+                            ? "bot"
+                            : "user",
+
+                        message.image
+                    );
+                }
+            );
+
+            highlightConversation();
+
+            scrollBottom();
+
+        } catch (error) {
+
+            console.error(
+                "LOAD CONVERSATION ERROR:",
+                error
+            );
+
+            addMessage(
+                error.message ||
+                "تعذر تحميل المحادثة.",
+                "bot"
+            );
+        }
+    }
+
+
+    /* =========================================================
+       NEW CHAT
+    ========================================================= */
+
+    newChatButton?.addEventListener(
+        "click",
+        () => {
 
             currentConversationId =
                 null;
 
             conversationHistory =
                 [];
+
+            clearImage();
+
+            hideTyping();
 
             chat.innerHTML =
                 `
@@ -632,1152 +870,1822 @@ async function deleteConversation(
                     </div>
 
                     <h1>
-                        أهلًا بيك 👋
+                        أهلاً بيك في Physics AI 👋
                     </h1>
 
                     <p>
-                        ابدأ محادثة جديدة مع Physics AI.
+                        اكتب سؤالك أو ارفع صورة
+                        المسألة وأنا هساعدك.
                     </p>
 
                 </div>
                 `;
 
+            const title =
+                document.getElementById(
+                    "chatTitle"
+                );
+
+            if (title) {
+
+                title.textContent =
+                    "Physics AI";
+            }
+
+            messageInput.value =
+                "";
+
+            resizeInput();
+
+            closeMobileSidebar();
+
+            messageInput.focus();
+        }
+    );
+
+
+    /* =========================================================
+       ADD MESSAGE
+    ========================================================= */
+
+    function addMessage(
+        text,
+        type,
+        image = null
+    ) {
+
+        const wrapper =
+            document.createElement(
+                "div"
+            );
+
+        wrapper.className =
+            `message ${type}`;
+
+
+        const avatar =
+            document.createElement(
+                "div"
+            );
+
+        avatar.className =
+            "avatar";
+
+        avatar.textContent =
+            type === "user"
+                ? "👤"
+                : "⚛️";
+
+
+        const bubble =
+            document.createElement(
+                "div"
+            );
+
+        bubble.className =
+            "bubble";
+
+
+        const strong =
+            document.createElement(
+                "strong"
+            );
+
+        strong.textContent =
+            type === "user"
+                ? (
+                    currentUser?.name ||
+                    "أنت"
+                )
+                : "Physics AI";
+
+
+        const paragraph =
+            document.createElement(
+                "p"
+            );
+
+        paragraph.textContent =
+            String(
+                text || ""
+            );
+
+
+        bubble.appendChild(
+            strong
+        );
+
+        bubble.appendChild(
+            paragraph
+        );
+
+
+        if (
+            image &&
+            typeof image === "string" &&
+            image.startsWith(
+                "data:image/"
+            )
+        ) {
+
+            const img =
+                document.createElement(
+                    "img"
+                );
+
+            img.src =
+                image;
+
+            img.alt =
+                "الصورة المرفقة";
+
+            img.loading =
+                "lazy";
+
+            bubble.appendChild(
+                img
+            );
         }
 
 
-        await loadConversations();
-
-
-    } catch (error) {
-
-        alert(
-            error.message
+        wrapper.appendChild(
+            avatar
         );
 
+        wrapper.appendChild(
+            bubble
+        );
+
+        chat.appendChild(
+            wrapper
+        );
+
+        scrollBottom();
     }
 
-}
 
+    /* =========================================================
+       TYPING INDICATOR
+    ========================================================= */
 
-/* =========================================================
-   ADD MESSAGE UI
-========================================================= */
+    function showTyping() {
 
-function addMessageToUI(
-    text,
-    type,
-    image = null
-) {
+        hideTyping();
 
-    const message =
-        document.createElement(
-            "div"
-        );
-
-    message.className =
-        `message ${type}`;
-
-
-    const avatar =
-        type === "user"
-            ? "👤"
-            : "⚛️";
-
-
-    const name =
-        type === "user"
-            ? "أنت"
-            : "Physics AI";
-
-
-    const avatarElement =
-        document.createElement(
-            "div"
-        );
-
-    avatarElement.className =
-        "avatar";
-
-    avatarElement.textContent =
-        avatar;
-
-
-    const bubble =
-        document.createElement(
-            "div"
-        );
-
-    bubble.className =
-        "bubble";
-
-
-    const strong =
-        document.createElement(
-            "strong"
-        );
-
-    strong.textContent =
-        name;
-
-
-    const paragraph =
-        document.createElement(
-            "p"
-        );
-
-    paragraph.textContent =
-        text;
-
-
-    bubble.appendChild(
-        strong
-    );
-
-
-    if (image) {
-
-        const img =
+        const wrapper =
             document.createElement(
-                "img"
+                "div"
             );
 
-        img.className =
-            "message-image";
+        wrapper.id =
+            "physicsTyping";
 
-        img.src =
-            image;
+        wrapper.className =
+            "message bot";
 
-        img.alt =
-            "صورة المسألة";
+
+        const avatar =
+            document.createElement(
+                "div"
+            );
+
+        avatar.className =
+            "avatar";
+
+        avatar.textContent =
+            "⚛️";
+
+
+        const bubble =
+            document.createElement(
+                "div"
+            );
+
+        bubble.className =
+            "bubble";
+
+
+        const strong =
+            document.createElement(
+                "strong"
+            );
+
+        strong.textContent =
+            "Physics AI";
+
+
+        const paragraph =
+            document.createElement(
+                "p"
+            );
+
+        paragraph.textContent =
+            "جاري التفكير...";
+
 
         bubble.appendChild(
-            img
+            strong
         );
 
+        bubble.appendChild(
+            paragraph
+        );
+
+
+        wrapper.appendChild(
+            avatar
+        );
+
+        wrapper.appendChild(
+            bubble
+        );
+
+        chat.appendChild(
+            wrapper
+        );
+
+        scrollBottom();
     }
 
 
-    bubble.appendChild(
-        paragraph
-    );
+    function hideTyping() {
 
-
-    message.appendChild(
-        avatarElement
-    );
-
-    message.appendChild(
-        bubble
-    );
-
-
-    chat.appendChild(
-        message
-    );
-
-
-    chat.scrollTop =
-        chat.scrollHeight;
-
-}
-
-
-/* =========================================================
-   SEND MESSAGE
-========================================================= */
-
-async function sendMessage() {
-
-    const text =
-        messageInput.value.trim();
-
-
-    if (
-        !text &&
-        !selectedImage
-    ) {
-
-        return;
-
+        document
+            .getElementById(
+                "physicsTyping"
+            )
+            ?.remove();
     }
 
 
-    if (
-        !currentConversationId
+    function scrollBottom() {
+
+        requestAnimationFrame(
+            () => {
+
+                chat.scrollTop =
+                    chat.scrollHeight;
+            }
+        );
+    }
+
+
+    /* =========================================================
+       SAVE MESSAGE
+    ========================================================= */
+
+    async function saveMessage(
+        role,
+        content,
+        image = null
     ) {
+
+        if (
+            !currentConversationId ||
+            !content
+        ) {
+            return;
+        }
 
         try {
 
-            const title =
-                text
-                    ? text.slice(
+            const response =
+                await fetch(
+                    `/api/conversations/${currentConversationId}/messages`,
+                    {
+                        method:
+                            "POST",
+
+                        credentials:
+                            "include",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+                                role,
+                                content,
+                                image
+                            })
+                    }
+                );
+
+            if (!response.ok) {
+
+                const data =
+                    await response
+                        .json()
+                        .catch(
+                            () => ({})
+                        );
+
+                console.error(
+                    "SAVE MESSAGE:",
+                    data
+                );
+            }
+
+        } catch (error) {
+
+            console.error(
+                "SAVE MESSAGE ERROR:",
+                error
+            );
+        }
+    }
+
+
+    /* =========================================================
+       SEND MESSAGE
+    ========================================================= */
+
+    async function sendMessage() {
+
+        if (isSending) {
+            return;
+        }
+
+        const text =
+            messageInput.value.trim();
+
+        if (
+            !text &&
+            !selectedImage
+        ) {
+            return;
+        }
+
+        isSending =
+            true;
+
+        sendButton.disabled =
+            true;
+
+        const image =
+            selectedImage;
+
+        const userText =
+            text ||
+            "حل المسألة الموجودة في الصورة.";
+
+        try {
+
+            /* إنشاء محادثة جديدة */
+
+            if (
+                !currentConversationId
+            ) {
+
+                await createConversation(
+                    userText.slice(
                         0,
                         50
                     )
-                    : "مسألة بالصورة";
+                );
+            }
 
 
-            await createConversation(
-                title
+            /* عرض رسالة المستخدم */
+
+            addMessage(
+                userText,
+                "user",
+                image
             );
+
+
+            conversationHistory.push({
+                role:
+                    "user",
+
+                content:
+                    userText
+            });
+
+
+            /* الحفاظ على التاريخ */
+
+            if (
+                conversationHistory.length >
+                20
+            ) {
+
+                conversationHistory =
+                    conversationHistory.slice(
+                        -20
+                    );
+            }
+
+
+            /* تنظيف */
+
+            messageInput.value =
+                "";
+
+            resizeInput();
+
+            clearImage();
+
+            showTyping();
+
+
+            /* إرسال للسيرفر */
+
+            const response =
+                await fetch(
+                    "/api/chat",
+                    {
+                        method:
+                            "POST",
+
+                        credentials:
+                            "include",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+
+                                message:
+                                    userText,
+
+                                history:
+                                    conversationHistory
+                                        .slice(
+                                            -20
+                                        ),
+
+                                grade:
+                                    gradeSelect?.value ||
+                                    "",
+
+                                subject:
+                                    subjectSelect?.value ||
+                                    "الفيزياء",
+
+                                unit:
+                                    getSelectText(
+                                        unitSelect
+                                    ),
+
+                                lesson:
+                                    getSelectText(
+                                        lessonSelect
+                                    ),
+
+                                mode:
+                                    "دردشة عامة",
+
+                                image:
+                                    image
+                            })
+                    }
+                );
+
+
+            let data;
+
+            try {
+
+                data =
+                    await response.json();
+
+            } catch {
+
+                throw new Error(
+                    "السيرفر لم يرجع استجابة صحيحة."
+                );
+            }
+
+
+            if (!response.ok) {
+
+                if (
+                    response.status ===
+                    401
+                ) {
+
+                    window.location.href =
+                        "/login.html";
+
+                    return;
+                }
+
+                throw new Error(
+                    data.error ||
+                    "فشل إرسال السؤال."
+                );
+            }
+
+
+            hideTyping();
+
+
+            const answer =
+                String(
+                    data.answer ||
+                    ""
+                ).trim();
+
+
+            addMessage(
+                answer ||
+                "لم تصل إجابة من Physics AI.",
+
+                "bot"
+            );
+
+
+            conversationHistory.push({
+                role:
+                    "assistant",
+
+                content:
+                    answer
+            });
+
+
+            if (
+                conversationHistory.length >
+                20
+            ) {
+
+                conversationHistory =
+                    conversationHistory.slice(
+                        -20
+                    );
+            }
+
+
+            /* حفظ السؤال */
+
+            await saveMessage(
+                "user",
+                userText,
+                image
+            );
+
+
+            /* حفظ الإجابة */
+
+            await saveMessage(
+                "assistant",
+                answer
+            );
+
+
+            await loadConversations();
+
+            highlightConversation();
 
 
         } catch (error) {
 
-            alert(
-                error.message
+            console.error(
+                "SEND MESSAGE ERROR:",
+                error
             );
 
-            return;
+            hideTyping();
 
+            addMessage(
+                error.message ||
+                "حصل خطأ أثناء إرسال السؤال.",
+                "bot"
+            );
+
+        } finally {
+
+            isSending =
+                false;
+
+            sendButton.disabled =
+                false;
+
+            messageInput.focus();
         }
-
     }
 
 
-    const imageToSend =
-        selectedImage;
+    function getSelectText(
+        select
+    ) {
+
+        if (
+            !select ||
+            select.value === ""
+        ) {
+            return "";
+        }
+
+        return (
+            select.options[
+                select.selectedIndex
+            ]?.text ||
+            ""
+        );
+    }
 
 
-    addMessageToUI(
-        text ||
-            "حل المسألة الموجودة في الصورة.",
-        "user",
-        imageToSend
+    /* =========================================================
+       IMAGE UPLOAD
+    ========================================================= */
+
+    uploadButton?.addEventListener(
+        "click",
+        () => {
+
+            if (!imageInput) {
+                return;
+            }
+
+            imageInput.value =
+                "";
+
+            imageInput.click();
+        }
     );
 
 
-    messageInput.value =
-        "";
+    imageInput?.addEventListener(
+        "change",
+        () => {
 
-    messageInput.style.height =
-        "auto";
+            const file =
+                imageInput.files?.[0];
 
+            if (!file) {
+                return;
+            }
 
-    removeSelectedImage();
-
-
-    sendButton.disabled =
-        true;
-
-    sendButton.textContent =
-        "…";
-
-
-    try {
-
-        await saveMessage(
-            "user",
-            text ||
-                "حل المسألة الموجودة في الصورة.",
-            imageToSend
-        );
-
-
-        const response =
-            await fetch(
-                "/api/chat",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        message:
-                            text ||
-                            "حل المسألة الموجودة في الصورة.",
-
-                        history:
-                            conversationHistory,
-
-                        image:
-                            imageToSend,
-
-                        grade,
-
-                        subject,
-
-                        unit,
-
-                        lesson,
-
-                        mode
-
-                    })
-
-                }
+            prepareImage(
+                file
             );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.error ||
-                "حدث خطأ."
-            );
-
         }
+    );
 
 
-        addMessageToUI(
-            data.answer,
-            "bot"
-        );
+    function prepareImage(
+        file
+    ) {
 
+        if (
+            !file.type ||
+            !file.type.startsWith(
+                "image/"
+            )
+        ) {
 
-        conversationHistory.push({
+            alert(
+                "من فضلك اختر صورة."
+            );
 
-            role:
-                "user",
-
-            content:
-                text ||
-                "حل المسألة الموجودة في الصورة."
-
-        });
-
-
-        conversationHistory.push({
-
-            role:
-                "assistant",
-
-            content:
-                data.answer
-
-        });
+            return;
+        }
 
 
         if (
-            conversationHistory.length >
-            20
+            file.size >
+            10 * 1024 * 1024
         ) {
 
-            conversationHistory =
-                conversationHistory.slice(
-                    -20
+            alert(
+                "حجم الصورة أكبر من 10MB."
+            );
+
+            return;
+        }
+
+
+        const reader =
+            new FileReader();
+
+
+        reader.onload =
+            () => {
+
+                const img =
+                    new Image();
+
+
+                img.onload =
+                    () => {
+
+                        const max =
+                            1600;
+
+                        let width =
+                            img.width;
+
+                        let height =
+                            img.height;
+
+
+                        const ratio =
+                            Math.min(
+                                max /
+                                    width,
+
+                                max /
+                                    height,
+
+                                1
+                            );
+
+
+                        width =
+                            Math.round(
+                                width *
+                                ratio
+                            );
+
+                        height =
+                            Math.round(
+                                height *
+                                ratio
+                            );
+
+
+                        const canvas =
+                            document.createElement(
+                                "canvas"
+                            );
+
+
+                        canvas.width =
+                            width;
+
+                        canvas.height =
+                            height;
+
+
+                        const ctx =
+                            canvas.getContext(
+                                "2d"
+                            );
+
+
+                        if (!ctx) {
+
+                            alert(
+                                "تعذر تجهيز الصورة."
+                            );
+
+                            return;
+                        }
+
+
+                        ctx.drawImage(
+                            img,
+                            0,
+                            0,
+                            width,
+                            height
+                        );
+
+
+                        selectedImage =
+                            canvas.toDataURL(
+                                "image/jpeg",
+                                0.80
+                            );
+
+
+                        showImagePreview();
+
+
+                        messageInput.focus();
+                    };
+
+
+                img.onerror =
+                    () => {
+
+                        alert(
+                            "تعذر قراءة الصورة."
+                        );
+                    };
+
+
+                img.src =
+                    String(
+                        reader.result
+                    );
+            };
+
+
+        reader.onerror =
+            () => {
+
+                alert(
+                    "تعذر قراءة الصورة."
                 );
+            };
 
-        }
 
-
-        await saveMessage(
-            "assistant",
-            data.answer
+        reader.readAsDataURL(
+            file
         );
-
-
-        await loadConversations();
-
-
-    } catch (error) {
-
-        console.error(
-            "SEND ERROR:",
-            error
-        );
-
-
-        addMessageToUI(
-            "حصلت مشكلة وأنا بحاول أجيب الإجابة. جرّب تاني.",
-            "bot"
-        );
-
-    } finally {
-
-        sendButton.disabled =
-            false;
-
-        sendButton.textContent =
-            "↑";
-
-        messageInput.focus();
-
-    }
-
-}
-
-
-/* =========================================================
-   SAVE MESSAGE
-========================================================= */
-
-async function saveMessage(
-    role,
-    content,
-    image = null
-) {
-
-    if (
-        !currentConversationId
-    ) {
-
-        return;
-
     }
 
 
-    const response =
-        await fetch(
-            `/api/conversations/${currentConversationId}/messages`,
-            {
-                method: "POST",
+    function showImagePreview() {
 
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-
-                body: JSON.stringify({
-
-                    role,
-
-                    content,
-
-                    image
-
-                })
-
-            }
-        );
-
-
-    if (!response.ok) {
-
-        console.warn(
-            "MESSAGE WAS NOT SAVED"
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   IMAGE
-========================================================= */
-
-uploadButton.addEventListener(
-    "click",
-    function () {
-
-        imageInput.click();
-
-    }
-);
-
-
-imageInput.addEventListener(
-    "change",
-    function () {
-
-        const file =
-            this.files[0];
-
-
-        if (!file) {
+        if (
+            !imagePreview ||
+            !previewImage ||
+            !selectedImage
+        ) {
             return;
         }
 
+        previewImage.src =
+            selectedImage;
 
-        processImage(
-            file
+        imagePreview.classList.remove(
+            "hidden"
         );
 
+        imagePreview.style.display =
+            "";
     }
-);
 
 
-cameraInput.addEventListener(
-    "change",
-    function () {
+    function clearImage() {
 
-        const file =
-            this.files[0];
+        selectedImage =
+            null;
 
 
-        if (!file) {
-            return;
+        if (previewImage) {
+
+            previewImage.removeAttribute(
+                "src"
+            );
         }
 
 
-        processImage(
-            file
-        );
+        if (imagePreview) {
 
-    }
-);
-
-
-function processImage(
-    file
-) {
-
-    if (
-        !file.type.startsWith(
-            "image/"
-        )
-    ) {
-
-        alert(
-            "اختار صورة فقط."
-        );
-
-        return;
-
-    }
-
-
-    if (
-        file.size >
-        10 * 1024 * 1024
-    ) {
-
-        alert(
-            "الصورة كبيرة جدًا. الحد الأقصى 10MB."
-        );
-
-        return;
-
-    }
-
-
-    const reader =
-        new FileReader();
-
-
-    reader.onload =
-        function () {
-
-            selectedImage =
-                reader.result;
-
-
-            previewImage.src =
-                selectedImage;
-
-
-            imagePreview.classList.remove(
+            imagePreview.classList.add(
                 "hidden"
             );
 
-        };
+            imagePreview.style.display =
+                "none";
+        }
 
 
-    reader.readAsDataURL(
-        file
+        if (imageInput) {
+
+            imageInput.value =
+                "";
+        }
+
+
+        if (cameraInput) {
+
+            cameraInput.value =
+                "";
+        }
+    }
+
+
+    removeImageButton?.addEventListener(
+        "click",
+        clearImage
     );
 
-}
 
+    /* =========================================================
+       CAMERA
+    ========================================================= */
 
-function removeSelectedImage() {
+    cameraButton?.addEventListener(
+        "click",
+        async () => {
 
-    selectedImage =
-        null;
+            if (isMobile()) {
 
+                cameraInput?.click();
 
-    previewImage.src =
-        "";
+                return;
+            }
 
-
-    imagePreview.classList.add(
-        "hidden"
+            await openCamera();
+        }
     );
 
 
-    imageInput.value =
-        "";
+    cameraInput?.addEventListener(
+        "change",
+        () => {
 
-    cameraInput.value =
-        "";
+            const file =
+                cameraInput.files?.[0];
 
-}
+            if (!file) {
+                return;
+            }
+
+            prepareImage(
+                file
+            );
+        }
+    );
 
 
-removeImageButton.addEventListener(
-    "click",
-    removeSelectedImage
-);
+    async function openCamera() {
 
+        if (!cameraModal) {
+            return;
+        }
 
-/* =========================================================
-   CAMERA
-========================================================= */
-
-cameraButton.addEventListener(
-    "click",
-    async function () {
 
         if (
             !navigator.mediaDevices ||
             !navigator.mediaDevices.getUserMedia
         ) {
 
-            cameraInput.click();
+            if (cameraError) {
+
+                cameraError.textContent =
+                    "الكاميرا غير مدعومة في هذا المتصفح.";
+            }
+
+            cameraModal.classList.remove(
+                "hidden"
+            );
 
             return;
-
         }
-
-
-        cameraError.textContent =
-            "";
-
-
-        cameraModal.classList.remove(
-            "hidden"
-        );
 
 
         try {
 
             cameraStream =
-                await navigator.mediaDevices.getUserMedia({
-
-                    video: {
-                        facingMode:
-                            {
+                await navigator.mediaDevices.getUserMedia(
+                    {
+                        video: {
+                            facingMode: {
                                 ideal:
                                     "environment"
-                            },
-
-                        width: {
-                            ideal: 1280
+                            }
                         },
 
-                        height: {
-                            ideal: 720
-                        }
-
-                    },
-
-                    audio: false
-
-                });
+                        audio:
+                            false
+                    }
+                );
 
 
-            cameraVideo.srcObject =
-                cameraStream;
+            if (cameraVideo) {
 
+                cameraVideo.srcObject =
+                    cameraStream;
+            }
+
+
+            if (cameraError) {
+
+                cameraError.textContent =
+                    "";
+            }
+
+
+            cameraModal.classList.remove(
+                "hidden"
+            );
 
         } catch (error) {
 
             console.error(
+                "CAMERA ERROR:",
                 error
             );
 
-            cameraError.textContent =
-                "مش قادر أوصل للكاميرا. اسمح للمتصفح باستخدام الكاميرا أو استخدم رفع صورة.";
 
+            if (cameraError) {
+
+                cameraError.textContent =
+                    "اسمح للمتصفح باستخدام الكاميرا ثم حاول مرة أخرى.";
+            }
+
+
+            cameraModal.classList.remove(
+                "hidden"
+            );
         }
-
     }
-);
 
 
-takePhotoButton.addEventListener(
-    "click",
-    function () {
+    function closeCamera() {
 
-        if (
-            !cameraStream
-        ) {
-            return;
-        }
-
-
-        const width =
-            cameraVideo.videoWidth;
-
-        const height =
-            cameraVideo.videoHeight;
-
-
-        cameraCanvas.width =
-            width;
-
-        cameraCanvas.height =
-            height;
-
-
-        const context =
-            cameraCanvas.getContext(
-                "2d"
-            );
-
-
-        context.drawImage(
-            cameraVideo,
-            0,
-            0,
-            width,
-            height
-        );
-
-
-        selectedImage =
-            cameraCanvas.toDataURL(
-                "image/jpeg",
-                0.82
-            );
-
-
-        previewImage.src =
-            selectedImage;
-
-
-        imagePreview.classList.remove(
+        cameraModal?.classList.add(
             "hidden"
         );
 
 
-        closeCamera();
+        if (cameraStream) {
 
-    }
-);
+            cameraStream
+                .getTracks()
+                .forEach(
+                    track => {
+                        track.stop();
+                    }
+                );
+
+            cameraStream =
+                null;
+        }
 
 
-closeCameraButton.addEventListener(
-    "click",
-    closeCamera
-);
+        if (cameraVideo) {
 
-
-function closeCamera() {
-
-    if (
-        cameraStream
-    ) {
-
-        cameraStream
-            .getTracks()
-            .forEach(
-                function (track) {
-
-                    track.stop();
-
-                }
-            );
-
-        cameraStream =
-            null;
-
+            cameraVideo.srcObject =
+                null;
+        }
     }
 
 
-    cameraVideo.srcObject =
-        null;
-
-
-    cameraModal.classList.add(
-        "hidden"
+    closeCameraButton?.addEventListener(
+        "click",
+        closeCamera
     );
 
-}
+
+    takePhotoButton?.addEventListener(
+        "click",
+        () => {
+
+            if (
+                !cameraVideo ||
+                !cameraCanvas
+            ) {
+                return;
+            }
 
 
-/* =========================================================
-   VOICE
-========================================================= */
+            if (
+                !cameraVideo.videoWidth
+            ) {
 
-voiceButton.addEventListener(
-    "click",
-    async function () {
+                if (cameraError) {
+
+                    cameraError.textContent =
+                        "استنى لحظة لحد ما الكاميرا تشتغل.";
+                }
+
+                return;
+            }
+
+
+            const width =
+                cameraVideo.videoWidth;
+
+            const height =
+                cameraVideo.videoHeight;
+
+            const max =
+                1600;
+
+
+            const ratio =
+                Math.min(
+                    max /
+                        width,
+
+                    max /
+                        height,
+
+                    1
+                );
+
+
+            cameraCanvas.width =
+                Math.round(
+                    width *
+                    ratio
+                );
+
+            cameraCanvas.height =
+                Math.round(
+                    height *
+                    ratio
+                );
+
+
+            const ctx =
+                cameraCanvas.getContext(
+                    "2d"
+                );
+
+
+            if (!ctx) {
+
+                return;
+            }
+
+
+            ctx.drawImage(
+                cameraVideo,
+                0,
+                0,
+                cameraCanvas.width,
+                cameraCanvas.height
+            );
+
+
+            selectedImage =
+                cameraCanvas.toDataURL(
+                    "image/jpeg",
+                    0.80
+                );
+
+
+            showImagePreview();
+
+            closeCamera();
+
+            messageInput.focus();
+        }
+    );
+
+
+    /* =========================================================
+       VOICE RECORDING
+    ========================================================= */
+
+    voiceButton?.addEventListener(
+        "click",
+        async () => {
+
+            if (isRecording) {
+
+                stopRecording();
+
+                return;
+            }
+
+            await startRecording();
+        }
+    );
+
+
+    async function startRecording() {
 
         if (
-            mediaRecorder &&
-            mediaRecorder.state ===
-                "recording"
+            !navigator.mediaDevices ||
+            !navigator.mediaDevices.getUserMedia
         ) {
 
-            stopRecording();
+            setVoiceStatus(
+                "الميكروفون غير مدعوم."
+            );
 
             return;
-
         }
-
-
-        await startRecording();
-
-    }
-);
-
-
-async function startRecording() {
-
-    if (
-        !navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia
-    ) {
-
-        voiceStatus.textContent =
-            "المتصفح مش بيدعم تسجيل الصوت.";
-
-        return;
-
-    }
-
-
-    try {
-
-        const stream =
-            await navigator.mediaDevices.getUserMedia(
-                {
-                    audio: true
-                }
-            );
-
-
-        audioChunks =
-            [];
-
-
-        let options = {};
 
 
         if (
-            MediaRecorder.isTypeSupported(
-                "audio/webm;codecs=opus"
-            )
+            typeof MediaRecorder ===
+            "undefined"
         ) {
 
-            options.mimeType =
-                "audio/webm;codecs=opus";
+            setVoiceStatus(
+                "تسجيل الصوت غير مدعوم في هذا المتصفح."
+            );
 
+            return;
         }
 
 
-        mediaRecorder =
-            new MediaRecorder(
-                stream,
-                options
-            );
+        try {
+
+            recordingStream =
+                await navigator.mediaDevices.getUserMedia(
+                    {
+                        audio:
+                            true
+                    }
+                );
 
 
-        mediaRecorder.ondataavailable =
-            function (event) {
+            recordedChunks =
+                [];
+
+
+            let mimeType =
+                "";
+
+
+            const possibleTypes = [
+                "audio/webm;codecs=opus",
+                "audio/webm",
+                "audio/ogg;codecs=opus",
+                "audio/ogg"
+            ];
+
+
+            for (
+                const type
+                of possibleTypes
+            ) {
 
                 if (
-                    event.data &&
-                    event.data.size > 0
+                    MediaRecorder.isTypeSupported(
+                        type
+                    )
                 ) {
 
-                    audioChunks.push(
-                        event.data
+                    mimeType =
+                        type;
+
+                    break;
+                }
+            }
+
+
+            const options =
+                mimeType
+                    ? { mimeType }
+                    : undefined;
+
+
+            mediaRecorder =
+                new MediaRecorder(
+                    recordingStream,
+                    options
+                );
+
+
+            mediaRecorder.ondataavailable =
+                event => {
+
+                    if (
+                        event.data &&
+                        event.data.size >
+                            0
+                    ) {
+
+                        recordedChunks.push(
+                            event.data
+                        );
+                    }
+                };
+
+
+            mediaRecorder.onerror =
+                event => {
+
+                    console.error(
+                        "MEDIA RECORDER ERROR:",
+                        event
                     );
-
-                }
-
-            };
+                };
 
 
-        mediaRecorder.onstop =
-            async function () {
+            mediaRecorder.onstop =
+                async () => {
 
-                stream
-                    .getTracks()
-                    .forEach(
-                        function (track) {
-                            track.stop();
-                        }
-                    );
+                    recordingStream
+                        ?.getTracks()
+                        .forEach(
+                            track => {
+                                track.stop();
+                            }
+                        );
 
+                    recordingStream =
+                        null;
 
-                await transcribeAudio();
-
-            };
-
-
-        mediaRecorder.start();
+                    await transcribeAudio();
+                };
 
 
-        voiceButton.classList.add(
-            "recording"
-        );
-
-
-        voiceStatus.textContent =
-            "🎙️ بيسجل... اضغط تاني لما تخلص.";
-
-
-    } catch (error) {
-
-        console.error(
-            error
-        );
-
-        voiceStatus.textContent =
-            "مش قادر أوصل للميكروفون. اسمح للمتصفح باستخدام الميكروفون.";
-
-    }
-
-}
-
-
-function stopRecording() {
-
-    if (
-        mediaRecorder &&
-        mediaRecorder.state ===
-            "recording"
-    ) {
-
-        mediaRecorder.stop();
-
-    }
-
-
-    voiceButton.classList.remove(
-        "recording"
-    );
-
-
-    voiceStatus.textContent =
-        "جاري تحويل الصوت إلى نص...";
-
-}
-
-
-async function transcribeAudio() {
-
-    try {
-
-        const blob =
-            new Blob(
-                audioChunks,
-                {
-                    type:
-                        "audio/webm"
-                }
+            mediaRecorder.start(
+                250
             );
 
 
-        if (
-            blob.size === 0
-        ) {
+            isRecording =
+                true;
 
-            throw new Error(
-                "التسجيل فارغ."
+
+            if (voiceButton) {
+
+                voiceButton.textContent =
+                    "⏹️";
+            }
+
+
+            setVoiceStatus(
+                "جاري التسجيل... اضغط مرة أخرى للإيقاف."
             );
-
-        }
-
-
-        const formData =
-            new FormData();
-
-
-        formData.append(
-            "audio",
-            blob,
-            "recording.webm"
-        );
-
-
-        const response =
-            await fetch(
-                "/api/transcribe",
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.error ||
-                "تعذر تحويل الصوت."
-            );
-
-        }
-
-
-        const text =
-            String(
-                data.text || ""
-            ).trim();
-
-
-        if (!text) {
-
-            voiceStatus.textContent =
-                "ملقتش كلام واضح في التسجيل.";
-
-            return;
-
-        }
-
-
-        messageInput.value =
-            text;
-
-
-        autoResize();
-
-
-        voiceStatus.textContent =
-            "✅ تم تحويل الصوت. راجع الكلام واضغط إرسال.";
-
-
-        messageInput.focus();
-
-
-    } catch (error) {
-
-        console.error(
-            "VOICE ERROR:",
-            error
-        );
-
-        voiceStatus.textContent =
-            "حصلت مشكلة في تحويل التسجيل.";
-
-    }
-
-}
-
-
-/* =========================================================
-   TEXTAREA
-========================================================= */
-
-function autoResize() {
-
-    messageInput.style.height =
-        "auto";
-
-
-    messageInput.style.height =
-        Math.min(
-            messageInput.scrollHeight,
-            150
-        ) +
-        "px";
-
-}
-
-
-messageInput.addEventListener(
-    "input",
-    autoResize
-);
-
-
-messageInput.addEventListener(
-    "keydown",
-    function (event) {
-
-        if (
-            event.key === "Enter" &&
-            !event.shiftKey
-        ) {
-
-            event.preventDefault();
-
-            sendMessage();
-
-        }
-
-    }
-);
-
-
-sendButton.addEventListener(
-    "click",
-    sendMessage
-);
-
-
-/* =========================================================
-   NEW CHAT
-========================================================= */
-
-newChatButton.addEventListener(
-    "click",
-    async function () {
-
-        try {
-
-            await createConversation();
-
-        } catch (error) {
-
-            alert(
-                error.message
-            );
-
-        }
-
-    }
-);
-
-
-/* =========================================================
-   LOGOUT
-========================================================= */
-
-logoutButton.addEventListener(
-    "click",
-    async function () {
-
-        try {
-
-            await fetch(
-                "/api/auth/logout",
-                {
-                    method: "POST"
-                }
-            );
-
-            window.location.href =
-                "/login.html";
-
 
         } catch (error) {
 
             console.error(
+                "RECORDING ERROR:",
                 error
             );
 
+
+            setVoiceStatus(
+                "تعذر فتح الميكروفون. اسمح للمتصفح باستخدامه."
+            );
+        }
+    }
+
+
+    function stopRecording() {
+
+        if (
+            mediaRecorder &&
+            mediaRecorder.state !==
+                "inactive"
+        ) {
+
+            mediaRecorder.stop();
+
+        } else {
+
+            recordingStream
+                ?.getTracks()
+                .forEach(
+                    track => {
+                        track.stop();
+                    }
+                );
         }
 
-    }
-);
+
+        isRecording =
+            false;
 
 
-/* =========================================================
-   INIT
-========================================================= */
+        if (voiceButton) {
 
-async function init() {
-
-    const loggedIn =
-        await loadUser();
-
-
-    if (!loggedIn) {
-        return;
+            voiceButton.textContent =
+                "🎙️";
+        }
     }
 
 
-    await loadConversations();
+    async function transcribeAudio() {
 
-}
+        try {
+
+            if (
+                !recordedChunks.length
+            ) {
+
+                setVoiceStatus(
+                    "لم يتم تسجيل صوت."
+                );
+
+                return;
+            }
 
 
-init();
+            setVoiceStatus(
+                "جاري تحويل التسجيل إلى نص..."
+            );
+
+
+            const blob =
+                new Blob(
+                    recordedChunks,
+                    {
+                        type:
+                            recordedChunks[0]
+                                ?.type ||
+                            "audio/webm"
+                    }
+                );
+
+
+            if (!blob.size) {
+
+                throw new Error(
+                    "التسجيل فارغ."
+                );
+            }
+
+
+            const formData =
+                new FormData();
+
+
+            formData.append(
+                "audio",
+                blob,
+                "physics-question.webm"
+            );
+
+
+            const response =
+                await fetch(
+                    "/api/transcribe",
+                    {
+                        method:
+                            "POST",
+
+                        credentials:
+                            "include",
+
+                        body:
+                            formData
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "تعذر تحويل التسجيل."
+                );
+            }
+
+
+            const text =
+                String(
+                    data.text ||
+                    ""
+                ).trim();
+
+
+            if (text) {
+
+                messageInput.value =
+                    text;
+
+                resizeInput();
+
+                messageInput.focus();
+
+                setVoiceStatus(
+                    "تم تحويل التسجيل إلى نص."
+                );
+
+            } else {
+
+                setVoiceStatus(
+                    "لم أستطع استخراج كلام واضح من التسجيل."
+                );
+            }
+
+        } catch (error) {
+
+            console.error(
+                "TRANSCRIBE ERROR:",
+                error
+            );
+
+
+            setVoiceStatus(
+                error.message ||
+                "فشل تحويل التسجيل."
+            );
+
+        } finally {
+
+            recordedChunks =
+                [];
+
+            mediaRecorder =
+                null;
+
+
+            setTimeout(
+                () => {
+
+                    setVoiceStatus(
+                        ""
+                    );
+
+                },
+                3000
+            );
+        }
+    }
+
+
+    function setVoiceStatus(
+        text
+    ) {
+
+        if (voiceStatus) {
+
+            voiceStatus.textContent =
+                text || "";
+        }
+    }
+
+
+    /* =========================================================
+       CURRICULUM
+    ========================================================= */
+
+    function resetUnitsAndLessons() {
+
+        if (unitSelect) {
+
+            unitSelect.innerHTML =
+                `
+                <option value="">
+                    اختر الوحدة
+                </option>
+                `;
+        }
+
+
+        if (lessonSelect) {
+
+            lessonSelect.innerHTML =
+                `
+                <option value="">
+                    اختر الدرس
+                </option>
+                `;
+        }
+    }
+
+
+    gradeSelect?.addEventListener(
+        "change",
+        () => {
+
+            resetUnitsAndLessons();
+
+
+            const data =
+                curriculum[
+                    gradeSelect.value
+                ];
+
+
+            if (!data) {
+
+                if (lessonName) {
+
+                    lessonName.textContent =
+                        "دردشة عامة";
+                }
+
+
+                if (lessonDescription) {
+
+                    lessonDescription.textContent =
+                        "اسأل Physics AI عن الفيزياء.";
+                }
+
+                return;
+            }
+
+
+            data.units.forEach(
+                (
+                    unit,
+                    index
+                ) => {
+
+                    const option =
+                        document.createElement(
+                            "option"
+                        );
+
+
+                    option.value =
+                        String(index);
+
+
+                    option.textContent =
+                        unit.title;
+
+
+                    unitSelect?.appendChild(
+                        option
+                    );
+                }
+            );
+
+
+            if (lessonName) {
+
+                lessonName.textContent =
+                    "اختر الدرس";
+            }
+
+
+            if (lessonDescription) {
+
+                lessonDescription.textContent =
+                    "حدد الوحدة والدرس لزيادة دقة السياق.";
+            }
+        }
+    );
+
+
+    unitSelect?.addEventListener(
+        "change",
+        () => {
+
+            if (lessonSelect) {
+
+                lessonSelect.innerHTML =
+                    `
+                    <option value="">
+                        اختر الدرس
+                    </option>
+                    `;
+            }
+
+
+            const data =
+                curriculum[
+                    gradeSelect?.value
+                ];
+
+
+            if (
+                !data ||
+                !unitSelect ||
+                unitSelect.value === ""
+            ) {
+
+                return;
+            }
+
+
+            const unit =
+                data.units[
+                    Number(
+                        unitSelect.value
+                    )
+                ];
+
+
+            if (!unit) {
+                return;
+            }
+
+
+            unit.lessons.forEach(
+                (
+                    lesson,
+                    index
+                ) => {
+
+                    const option =
+                        document.createElement(
+                            "option"
+                        );
+
+
+                    option.value =
+                        String(index);
+
+
+                    option.textContent =
+                        lesson;
+
+
+                    lessonSelect?.appendChild(
+                        option
+                    );
+                }
+            );
+
+
+            if (lessonName) {
+
+                lessonName.textContent =
+                    unit.title;
+            }
+
+
+            if (lessonDescription) {
+
+                lessonDescription.textContent =
+                    "اختر الدرس لتحديد السياق الدراسي.";
+            }
+        }
+    );
+
+
+    lessonSelect?.addEventListener(
+        "change",
+        () => {
+
+            if (
+                lessonName &&
+                lessonSelect &&
+                lessonSelect.value !== ""
+            ) {
+
+                lessonName.textContent =
+                    lessonSelect.options[
+                        lessonSelect.selectedIndex
+                    ]?.text ||
+                    "الدرس";
+            }
+
+
+            if (lessonDescription) {
+
+                lessonDescription.textContent =
+                    "اسأل Physics AI عن أي سؤال في هذا الدرس.";
+            }
+        }
+    );
+
+
+    /* =========================================================
+       LOGOUT
+    ========================================================= */
+
+    logoutButton?.addEventListener(
+        "click",
+        async () => {
+
+            try {
+
+                await fetch(
+                    "/api/auth/logout",
+                    {
+                        method:
+                            "POST",
+
+                        credentials:
+                            "include"
+                    }
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "LOGOUT ERROR:",
+                    error
+                );
+            }
+
+
+            window.location.href =
+                "/login.html";
+        }
+    );
+
+
+    /* =========================================================
+       INIT
+    ========================================================= */
+
+    (async function init() {
+
+        try {
+
+            const loggedIn =
+                await loadUser();
+
+
+            if (!loggedIn) {
+                return;
+            }
+
+
+            await loadConversations();
+
+
+            resizeInput();
+
+
+            messageInput.focus();
+
+        } catch (error) {
+
+            console.error(
+                "INIT ERROR:",
+                error
+            );
+
+
+            window.location.href =
+                "/login.html";
+        }
+
+    })();
+
+});
