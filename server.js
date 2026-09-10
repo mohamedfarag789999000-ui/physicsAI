@@ -1,5 +1,3 @@
-"use strict";
-
 require("dotenv").config();
 
 const express = require("express");
@@ -12,75 +10,36 @@ const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
 
-/* =========================================================
-   SERVER / RENDER
-========================================================= */
+const PORT = process.env.PORT || 3000;
 
-const PORT =
-    Number(process.env.PORT) || 10000;
-
-/*
- * مهم جدًا على Render.
- */
 app.set("trust proxy", 1);
 
 /* =========================================================
    GEMINI
 ========================================================= */
 
-const GEMINI_API_KEY =
-    String(
-        process.env.GEMINI_API_KEY || ""
-    ).trim();
-
-/*
- * لو GEMINI_MODEL موجود في Render Environment
- * فسوف يستخدمه.
- * وإلا سيستخدم gemini-3.6-flash.
- */
-const GEMINI_MODEL =
-    String(
-        process.env.GEMINI_MODEL ||
-            "gemini-3.6-flash"
-    ).trim();
-
-if (!GEMINI_API_KEY) {
-    console.error(
-        "ERROR: GEMINI_API_KEY غير موجود في Environment Variables."
-    );
+if (!process.env.GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY غير موجود.");
+    process.exit(1);
 }
 
-const ai =
-    GEMINI_API_KEY
-        ? new GoogleGenAI({
-              apiKey:
-                  GEMINI_API_KEY
-          })
-        : null;
+const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY
+});
+
+const GEMINI_MODEL =
+    process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
 /* =========================================================
    DATABASE
 ========================================================= */
 
-const db =
-    new Database(
-        path.join(
-            __dirname,
-            "physics-ai.db"
-        )
-    );
-
-db.pragma(
-    "journal_mode = WAL"
+const db = new Database(
+    path.join(__dirname, "physics-ai.db")
 );
 
-db.pragma(
-    "foreign_keys = ON"
-);
-
-/* =========================================================
-   DATABASE TABLES
-========================================================= */
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -118,7 +77,7 @@ db.exec(`
 `);
 
 /* =========================================================
-   EXPRESS BODY
+   MIDDLEWARE
 ========================================================= */
 
 app.use(
@@ -134,19 +93,6 @@ app.use(
     })
 );
 
-/* =========================================================
-   SESSION
-========================================================= */
-
-/*
- * Session مضبوط لـ Render / HTTPS.
- *
- * saveUninitialized = false
- * يمنع إنشاء جلسات فارغة.
- *
- * secure = auto
- * يجعل cookie Secure عند HTTPS.
- */
 app.use(
     session({
         name: "physicsai.sid",
@@ -163,13 +109,9 @@ app.use(
 
         cookie: {
             httpOnly: true,
-
             sameSite: "lax",
-
             secure: "auto",
-
             path: "/",
-
             maxAge:
                 1000 *
                 60 *
@@ -180,235 +122,117 @@ app.use(
     })
 );
 
-/* =========================================================
-   STATIC PUBLIC
-========================================================= */
-
 app.use(
     express.static(
-        path.join(
-            __dirname,
-            "public"
-        )
+        path.join(__dirname, "public")
     )
 );
 
 /* =========================================================
-   MULTER - IMAGE
+   IMAGE UPLOAD
 ========================================================= */
 
-const imageUpload =
-    multer({
-        storage:
-            multer.memoryStorage(),
+const imageUpload = multer({
+    storage: multer.memoryStorage(),
 
-        limits: {
-            fileSize:
-                10 *
-                1024 *
-                1024
-        },
+    limits: {
+        fileSize: 10 * 1024 * 1024
+    },
 
-        fileFilter:
-            function (
-                req,
-                file,
-                cb
-            ) {
-                if (
-                    file.mimetype &&
-                    file.mimetype.startsWith(
-                        "image/"
-                    )
-                ) {
-                    return cb(
-                        null,
-                        true
-                    );
-                }
+    fileFilter: function (req, file, cb) {
+        if (
+            file.mimetype &&
+            file.mimetype.startsWith("image/")
+        ) {
+            return cb(null, true);
+        }
 
-                cb(
-                    new Error(
-                        "يسمح برفع الصور فقط."
-                    )
-                );
-            }
-    });
-
-/* =========================================================
-   MULTER - AUDIO
-========================================================= */
-
-const audioUpload =
-    multer({
-        storage:
-            multer.memoryStorage(),
-
-        limits: {
-            fileSize:
-                25 *
-                1024 *
-                1024
-        },
-
-        fileFilter:
-            function (
-                req,
-                file,
-                cb
-            ) {
-                const mimeType =
-                    String(
-                        file.mimetype ||
-                            ""
-                    )
-                        .toLowerCase()
-                        .split(";")[0];
-
-                if (
-                    mimeType.startsWith(
-                        "audio/"
-                    )
-                ) {
-                    return cb(
-                        null,
-                        true
-                    );
-                }
-
-                cb(
-                    new Error(
-                        "نوع الملف الصوتي غير مدعوم."
-                    )
-                );
-            }
-    });
-
-/* =========================================================
-   HELPERS
-========================================================= */
-
-function cleanText(
-    value,
-    maxLength = 10000
-) {
-    return String(
-        value || ""
-    )
-        .trim()
-        .slice(
-            0,
-            maxLength
+        cb(
+            new Error(
+                "يسمح برفع الصور فقط."
+            )
         );
-}
+    }
+});
 
-function requireLogin(
-    req,
-    res,
-    next
-) {
+/* =========================================================
+   AUDIO UPLOAD
+========================================================= */
+
+const audioUpload = multer({
+    storage: multer.memoryStorage(),
+
+    limits: {
+        fileSize: 25 * 1024 * 1024
+    },
+
+    fileFilter: function (req, file, cb) {
+        const mime = String(
+            file.mimetype || ""
+        )
+            .toLowerCase()
+            .split(";")[0];
+
+        if (mime.startsWith("audio/")) {
+            return cb(null, true);
+        }
+
+        cb(
+            new Error(
+                "نوع الملف الصوتي غير مدعوم."
+            )
+        );
+    }
+});
+
+/* =========================================================
+   AUTH HELPERS
+========================================================= */
+
+function requireLogin(req, res, next) {
     if (
         !req.session ||
         !req.session.userId
     ) {
-        return res.status(
-            401
-        ).json({
-            error:
-                "لازم تسجل دخول الأول."
+        return res.status(401).json({
+            error: "لازم تسجل دخول الأول."
         });
     }
 
     next();
 }
 
-/*
- * نحفظ الـ session قبل الرد.
- * ده مهم جدًا بعد register/login
- * حتى لا نرسل المستخدم إلى study/chat
- * قبل تثبيت الجلسة.
- */
-function saveSession(
-    req,
-    res,
-    payload
-) {
-    req.session.save(
-        function (
-            error
-        ) {
-            if (error) {
-                console.error(
-                    "SESSION SAVE ERROR:",
-                    error
-                );
-
-                return res.status(
-                    500
-                ).json({
-                    error:
-                        "تعذر حفظ جلسة الدخول."
-                });
-            }
-
-            res.json(
-                payload
+function saveSession(req, res, data) {
+    req.session.save(function (error) {
+        if (error) {
+            console.error(
+                "SESSION SAVE ERROR:",
+                error
             );
+
+            return res.status(500).json({
+                error:
+                    "حصل خطأ أثناء حفظ جلسة الدخول."
+            });
         }
-    );
+
+        res.json(data);
+    });
 }
 
 /* =========================================================
    HOME
 ========================================================= */
 
-app.get(
-    "/",
-    function (
-        req,
-        res
-    ) {
-        res.sendFile(
-            path.join(
-                __dirname,
-                "public",
-                "index.html"
-            )
-        );
-    }
-);
-
-/* =========================================================
-   HEALTH CHECK
-========================================================= */
-
-app.get(
-    "/api/health",
-    function (
-        req,
-        res
-    ) {
-        res.json({
-            success:
-                true,
-
-            server:
-                "online",
-
-            model:
-                GEMINI_MODEL,
-
-            loggedIn:
-                Boolean(
-                    req.session &&
-                    req.session.userId
-                ),
-
-            time:
-                new Date().toISOString()
-        });
-    }
-);
+app.get("/", function (req, res) {
+    res.sendFile(
+        path.join(
+            __dirname,
+            "public",
+            "index.html"
+        )
+    );
+});
 
 /* =========================================================
    REGISTER
@@ -416,65 +240,47 @@ app.get(
 
 app.post(
     "/api/auth/register",
-    async function (
-        req,
-        res
-    ) {
+    async function (req, res) {
         try {
-            const name =
-                cleanText(
-                    req.body.name,
-                    80
-                );
+            const name = String(
+                req.body.name || ""
+            )
+                .trim()
+                .slice(0, 80);
 
-            const email =
-                cleanText(
-                    req.body.email,
-                    160
-                ).toLowerCase();
+            const email = String(
+                req.body.email || ""
+            )
+                .trim()
+                .toLowerCase()
+                .slice(0, 160);
 
-            const password =
-                String(
-                    req.body.password ||
-                        ""
-                );
+            const password = String(
+                req.body.password || ""
+            );
 
             if (!name) {
-                return res.status(
-                    400
-                ).json({
-                    error:
-                        "اكتب اسمك."
+                return res.status(400).json({
+                    error: "اكتب اسمك."
                 });
             }
 
             if (!email) {
-                return res.status(
-                    400
-                ).json({
+                return res.status(400).json({
                     error:
                         "اكتب البريد الإلكتروني."
                 });
             }
 
-            if (
-                !email.includes("@")
-            ) {
-                return res.status(
-                    400
-                ).json({
+            if (!email.includes("@")) {
+                return res.status(400).json({
                     error:
                         "اكتب بريد إلكتروني صحيح."
                 });
             }
 
-            if (
-                password.length <
-                6
-            ) {
-                return res.status(
-                    400
-                ).json({
+            if (password.length < 6) {
+                return res.status(400).json({
                     error:
                         "كلمة السر لازم تكون 6 أحرف على الأقل."
                 });
@@ -485,16 +291,10 @@ app.post(
                     SELECT id
                     FROM users
                     WHERE email = ?
-                `).get(
-                    email
-                );
+                `).get(email);
 
-            if (
-                existingUser
-            ) {
-                return res.status(
-                    409
-                ).json({
+            if (existingUser) {
+                return res.status(409).json({
                     error:
                         "البريد الإلكتروني مستخدم بالفعل."
                 });
@@ -509,11 +309,7 @@ app.post(
             const result =
                 db.prepare(`
                     INSERT INTO users
-                    (
-                        name,
-                        email,
-                        password
-                    )
+                    (name, email, password)
                     VALUES (?, ?, ?)
                 `).run(
                     name,
@@ -522,27 +318,23 @@ app.post(
                 );
 
             req.session.regenerate(
-                function (
-                    sessionError
-                ) {
-                    if (
-                        sessionError
-                    ) {
+                function (sessionError) {
+                    if (sessionError) {
                         console.error(
-                            "REGISTER SESSION ERROR:",
+                            "SESSION REGENERATE ERROR:",
                             sessionError
                         );
 
-                        return res.status(
-                            500
-                        ).json({
+                        return res.status(500).json({
                             error:
-                                "تعذر إنشاء جلسة الحساب."
+                                "تعذر إنشاء جلسة الدخول."
                         });
                     }
 
                     req.session.userId =
-                        result.lastInsertRowid;
+                        Number(
+                            result.lastInsertRowid
+                        );
 
                     req.session.userName =
                         name;
@@ -550,37 +342,38 @@ app.post(
                     req.session.authenticated =
                         true;
 
-                    saveSession(
-                        req,
-                        res,
-                        {
-                            success:
-                                true,
+                    saveSession(req, res, {
+                        success: true,
 
-                            user: {
-                                id:
-                                    result.lastInsertRowid,
-
-                                name,
-
-                                email
-                            }
+                        user: {
+                            id:
+                                Number(
+                                    result.lastInsertRowid
+                                ),
+                            name,
+                            email
                         }
-                    );
+                    });
                 }
             );
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
                 "REGISTER ERROR:",
                 error
             );
 
-            res.status(
-                500
-            ).json({
+            if (
+                error &&
+                error.code ===
+                    "SQLITE_CONSTRAINT_UNIQUE"
+            ) {
+                return res.status(409).json({
+                    error:
+                        "البريد الإلكتروني مستخدم بالفعل."
+                });
+            }
+
+            res.status(500).json({
                 error:
                     "حصل خطأ أثناء إنشاء الحساب."
             });
@@ -594,30 +387,20 @@ app.post(
 
 app.post(
     "/api/auth/login",
-    async function (
-        req,
-        res
-    ) {
+    async function (req, res) {
         try {
-            const email =
-                cleanText(
-                    req.body.email,
-                    160
-                ).toLowerCase();
+            const email = String(
+                req.body.email || ""
+            )
+                .trim()
+                .toLowerCase();
 
-            const password =
-                String(
-                    req.body.password ||
-                        ""
-                );
+            const password = String(
+                req.body.password || ""
+            );
 
-            if (
-                !email ||
-                !password
-            ) {
-                return res.status(
-                    400
-                ).json({
+            if (!email || !password) {
+                return res.status(400).json({
                     error:
                         "اكتب البريد الإلكتروني وكلمة السر."
                 });
@@ -628,14 +411,10 @@ app.post(
                     SELECT *
                     FROM users
                     WHERE email = ?
-                `).get(
-                    email
-                );
+                `).get(email);
 
             if (!user) {
-                return res.status(
-                    401
-                ).json({
+                return res.status(401).json({
                     error:
                         "البريد الإلكتروني أو كلمة السر غير صحيحة."
                 });
@@ -647,35 +426,22 @@ app.post(
                     user.password
                 );
 
-            if (
-                !validPassword
-            ) {
-                return res.status(
-                    401
-                ).json({
+            if (!validPassword) {
+                return res.status(401).json({
                     error:
                         "البريد الإلكتروني أو كلمة السر غير صحيحة."
                 });
             }
 
-            /*
-             * نعمل session جديدة بعد تسجيل الدخول.
-             */
             req.session.regenerate(
-                function (
-                    sessionError
-                ) {
-                    if (
-                        sessionError
-                    ) {
+                function (sessionError) {
+                    if (sessionError) {
                         console.error(
-                            "LOGIN SESSION ERROR:",
+                            "SESSION REGENERATE ERROR:",
                             sessionError
                         );
 
-                        return res.status(
-                            500
-                        ).json({
+                        return res.status(500).json({
                             error:
                                 "تعذر إنشاء جلسة الدخول."
                         });
@@ -690,118 +456,26 @@ app.post(
                     req.session.authenticated =
                         true;
 
-                    saveSession(
-                        req,
-                        res,
-                        {
-                            success:
-                                true,
+                    saveSession(req, res, {
+                        success: true,
 
-                            user: {
-                                id:
-                                    user.id,
-
-                                name:
-                                    user.name,
-
-                                email:
-                                    user.email
-                            }
+                        user: {
+                            id: user.id,
+                            name: user.name,
+                            email: user.email
                         }
-                    );
+                    });
                 }
             );
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
                 "LOGIN ERROR:",
                 error
             );
 
-            res.status(
-                500
-            ).json({
+            res.status(500).json({
                 error:
                     "حصل خطأ أثناء تسجيل الدخول."
-            });
-        }
-    }
-);
-
-/* =========================================================
-   CURRENT USER
-========================================================= */
-
-app.get(
-    "/api/auth/me",
-    function (
-        req,
-        res
-    ) {
-        try {
-            if (
-                !req.session ||
-                !req.session.userId
-            ) {
-                return res.json({
-                    loggedIn:
-                        false
-                });
-            }
-
-            const user =
-                db.prepare(`
-                    SELECT
-                        id,
-                        name,
-                        email
-                    FROM users
-                    WHERE id = ?
-                `).get(
-                    req.session.userId
-                );
-
-            if (!user) {
-                return req.session.destroy(
-                    function () {
-                        res.clearCookie(
-                            "physicsai.sid",
-                            {
-                                path:
-                                    "/"
-                            }
-                        );
-
-                        res.json({
-                            loggedIn:
-                                false
-                        });
-                    }
-                );
-            }
-
-            res.json({
-                loggedIn:
-                    true,
-
-                user
-            });
-
-        } catch (
-            error
-        ) {
-            console.error(
-                "AUTH ME ERROR:",
-                error
-            );
-
-            res.status(
-                500
-            ).json({
-                error:
-                    "تعذر التحقق من جلسة المستخدم."
             });
         }
     }
@@ -813,23 +487,16 @@ app.get(
 
 app.post(
     "/api/auth/logout",
-    function (
-        req,
-        res
-    ) {
+    function (req, res) {
         req.session.destroy(
-            function (
-                error
-            ) {
+            function (error) {
                 if (error) {
                     console.error(
                         "LOGOUT ERROR:",
                         error
                     );
 
-                    return res.status(
-                        500
-                    ).json({
+                    return res.status(500).json({
                         error:
                             "تعذر تسجيل الخروج."
                     });
@@ -838,25 +505,63 @@ app.post(
                 res.clearCookie(
                     "physicsai.sid",
                     {
-                        path:
-                            "/"
-                    }
-                );
-
-                res.clearCookie(
-                    "connect.sid",
-                    {
-                        path:
-                            "/"
+                        httpOnly: true,
+                        sameSite: "lax",
+                        secure: "auto",
+                        path: "/"
                     }
                 );
 
                 res.json({
-                    success:
-                        true
+                    success: true
                 });
             }
         );
+    }
+);
+
+/* =========================================================
+   CURRENT USER
+========================================================= */
+
+app.get(
+    "/api/auth/me",
+    function (req, res) {
+        if (
+            !req.session ||
+            !req.session.userId
+        ) {
+            return res.json({
+                loggedIn: false
+            });
+        }
+
+        const user =
+            db.prepare(`
+                SELECT
+                    id,
+                    name,
+                    email
+                FROM users
+                WHERE id = ?
+            `).get(
+                req.session.userId
+            );
+
+        if (!user) {
+            req.session.destroy(
+                function () {}
+            );
+
+            return res.json({
+                loggedIn: false
+            });
+        }
+
+        res.json({
+            loggedIn: true,
+            user
+        });
     }
 );
 
@@ -867,54 +572,47 @@ app.post(
 app.post(
     "/api/conversations",
     requireLogin,
-    function (
-        req,
-        res
-    ) {
+    function (req, res) {
         try {
-            const title =
-                cleanText(
-                    req.body.title,
-                    120
-                ) ||
-                "محادثة جديدة";
+            const title = String(
+                req.body.title ||
+                    "محادثة جديدة"
+            )
+                .trim()
+                .slice(0, 120);
+
+            const finalTitle =
+                title || "محادثة جديدة";
 
             const result =
                 db.prepare(`
                     INSERT INTO conversations
-                    (
-                        user_id,
-                        title
-                    )
+                    (user_id, title)
                     VALUES (?, ?)
                 `).run(
                     req.session.userId,
-                    title
+                    finalTitle
                 );
 
             res.json({
-                success:
-                    true,
+                success: true,
 
                 conversation: {
                     id:
-                        result.lastInsertRowid,
-
-                    title
+                        Number(
+                            result.lastInsertRowid
+                        ),
+                    title:
+                        finalTitle
                 }
             });
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
                 "CREATE CONVERSATION ERROR:",
                 error
             );
 
-            res.status(
-                500
-            ).json({
+            res.status(500).json({
                 error:
                     "تعذر إنشاء المحادثة."
             });
@@ -929,10 +627,7 @@ app.post(
 app.get(
     "/api/conversations",
     requireLogin,
-    function (
-        req,
-        res
-    ) {
+    function (req, res) {
         try {
             const conversations =
                 db.prepare(`
@@ -951,18 +646,13 @@ app.get(
             res.json({
                 conversations
             });
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
                 "GET CONVERSATIONS ERROR:",
                 error
             );
 
-            res.status(
-                500
-            ).json({
+            res.status(500).json({
                 error:
                     "تعذر تحميل المحادثات."
             });
@@ -977,10 +667,7 @@ app.get(
 app.get(
     "/api/conversations/:id",
     requireLogin,
-    function (
-        req,
-        res
-    ) {
+    function (req, res) {
         try {
             const conversationId =
                 Number(
@@ -992,9 +679,7 @@ app.get(
                     conversationId
                 )
             ) {
-                return res.status(
-                    400
-                ).json({
+                return res.status(400).json({
                     error:
                         "رقم المحادثة غير صحيح."
                 });
@@ -1011,12 +696,8 @@ app.get(
                     req.session.userId
                 );
 
-            if (
-                !conversation
-            ) {
-                return res.status(
-                    404
-                ).json({
+            if (!conversation) {
+                return res.status(404).json({
                     error:
                         "المحادثة غير موجودة."
                 });
@@ -1039,21 +720,15 @@ app.get(
 
             res.json({
                 conversation,
-
                 messages
             });
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
                 "GET CONVERSATION ERROR:",
                 error
             );
 
-            res.status(
-                500
-            ).json({
+            res.status(500).json({
                 error:
                     "تعذر تحميل المحادثة."
             });
@@ -1068,10 +743,7 @@ app.get(
 app.delete(
     "/api/conversations/:id",
     requireLogin,
-    function (
-        req,
-        res
-    ) {
+    function (req, res) {
         try {
             const conversationId =
                 Number(
@@ -1088,33 +760,23 @@ app.delete(
                     req.session.userId
                 );
 
-            if (
-                !result.changes
-            ) {
-                return res.status(
-                    404
-                ).json({
+            if (!result.changes) {
+                return res.status(404).json({
                     error:
                         "المحادثة غير موجودة."
                 });
             }
 
             res.json({
-                success:
-                    true
+                success: true
             });
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
                 "DELETE CONVERSATION ERROR:",
                 error
             );
 
-            res.status(
-                500
-            ).json({
+            res.status(500).json({
                 error:
                     "تعذر حذف المحادثة."
             });
@@ -1129,10 +791,7 @@ app.delete(
 app.post(
     "/api/conversations/:id/messages",
     requireLogin,
-    function (
-        req,
-        res
-    ) {
+    function (req, res) {
         try {
             const conversationId =
                 Number(
@@ -1146,29 +805,24 @@ app.post(
                     : "user";
 
             const content =
-                cleanText(
-                    req.body.content,
-                    50000
-                );
+                String(
+                    req.body.content || ""
+                ).trim();
 
             let image =
                 req.body.image ||
                 null;
 
             if (
-                typeof image ===
-                    "string" &&
+                typeof image === "string" &&
                 image.length >
                     8_000_000
             ) {
-                image =
-                    null;
+                image = null;
             }
 
             if (!content) {
-                return res.status(
-                    400
-                ).json({
+                return res.status(400).json({
                     error:
                         "الرسالة فارغة."
                 });
@@ -1185,12 +839,8 @@ app.post(
                     req.session.userId
                 );
 
-            if (
-                !conversation
-            ) {
-                return res.status(
-                    404
-                ).json({
+            if (!conversation) {
+                return res.status(404).json({
                     error:
                         "المحادثة غير موجودة."
                 });
@@ -1199,12 +849,7 @@ app.post(
             const result =
                 db.prepare(`
                     INSERT INTO messages
-                    (
-                        conversation_id,
-                        role,
-                        content,
-                        image
-                    )
+                    (conversation_id, role, content, image)
                     VALUES (?, ?, ?, ?)
                 `).run(
                     conversationId,
@@ -1223,32 +868,25 @@ app.post(
             );
 
             res.json({
-                success:
-                    true,
+                success: true,
 
                 message: {
                     id:
-                        result.lastInsertRowid,
-
+                        Number(
+                            result.lastInsertRowid
+                        ),
                     role,
-
                     content,
-
                     image
                 }
             });
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
                 "SAVE MESSAGE ERROR:",
                 error
             );
 
-            res.status(
-                500
-            ).json({
+            res.status(500).json({
                 error:
                     "تعذر حفظ الرسالة."
             });
@@ -1257,143 +895,31 @@ app.post(
 );
 
 /* =========================================================
-   PHYSICS CONSTANTS
+   PHYSICS DATA
 ========================================================= */
 
 const PHYSICS_CONSTANTS = {
-    g:
-        9.80665,
-
-    c:
-        299792458,
-
-    h:
-        6.62607015e-34,
-
-    hbar:
-        1.054571817e-34,
-
-    e:
-        1.602176634e-19,
-
-    me:
-        9.1093837139e-31,
-
-    mp:
-        1.67262192595e-27,
-
-    eps0:
-        8.8541878128e-12,
-
-    mu0:
-        1.25663706212e-6,
-
-    G:
-        6.67430e-11,
-
-    kB:
-        1.380649e-23,
-
-    R:
-        8.31446261815324,
-
-    NA:
-        6.02214076e23
+    g: 9.80665,
+    c: 299792458,
+    h: 6.62607015e-34,
+    hbar: 1.054571817e-34,
+    e: 1.602176634e-19,
+    me: 9.1093837139e-31,
+    mp: 1.67262192595e-27,
+    eps0: 8.8541878128e-12,
+    mu0: 1.25663706212e-6,
+    G: 6.67430e-11,
+    kB: 1.380649e-23,
+    R: 8.31446261815324,
+    NA: 6.02214076e23
 };
-
-/* =========================================================
-   UNITS
-========================================================= */
-
-const UNIT_FACTORS = {
-    mm: 1e-3,
-    cm: 1e-2,
-    km: 1e3,
-    m: 1,
-
-    mg: 1e-6,
-    g: 1e-3,
-    kg: 1,
-
-    N: 1,
-    kN: 1e3,
-    mN: 1e-3,
-
-    J: 1,
-    kJ: 1e3,
-
-    W: 1,
-    kW: 1e3,
-
-    Pa: 1,
-    kPa: 1e3,
-    MPa: 1e6,
-
-    V: 1,
-    mV: 1e-3,
-
-    A: 1,
-    mA: 1e-3,
-    uA: 1e-6,
-    "µA": 1e-6,
-
-    C: 1,
-    mC: 1e-3,
-
-    ohm: 1,
-    "Ω": 1,
-
-    Hz: 1,
-    kHz: 1e3,
-    MHz: 1e6,
-
-    s: 1,
-    ms: 1e-3,
-    min: 60,
-    h: 3600,
-
-    K: 1,
-    mol: 1
-};
-
-const UNIT_ALIASES = {
-    "م": "m",
-    "سم": "cm",
-    "مم": "mm",
-    "كم": "km",
-
-    "جرام": "g",
-    "غرام": "g",
-
-    "كجم": "kg",
-    "كيلوجرام": "kg",
-
-    "نيوتن": "N",
-    "جول": "J",
-    "وات": "W",
-    "باسكال": "Pa",
-    "فولت": "V",
-    "أمبير": "A",
-    "امبير": "A",
-
-    "ث": "s",
-    "ثانية": "s",
-    "دقيقة": "min",
-    "ساعة": "h"
-};
-
-/* =========================================================
-   PHYSICS DOMAINS
-========================================================= */
 
 const DOMAIN_RULES = [
     {
-        name:
-            "الميكانيكا والحركة",
+        name: "الميكانيكا والحركة",
 
         keys: [
             "سرعة",
-            "سرعته",
             "تسارع",
             "عجلة",
             "إزاحة",
@@ -1414,8 +940,7 @@ const DOMAIN_RULES = [
     },
 
     {
-        name:
-            "الدوران والاتزان",
+        name: "الدوران والاتزان",
 
         keys: [
             "عزم",
@@ -1430,8 +955,7 @@ const DOMAIN_RULES = [
     },
 
     {
-        name:
-            "الجاذبية والفلك",
+        name: "الجاذبية والفلك",
 
         keys: [
             "جاذبية",
@@ -1445,8 +969,7 @@ const DOMAIN_RULES = [
     },
 
     {
-        name:
-            "الموائع",
+        name: "الموائع",
 
         keys: [
             "ضغط",
@@ -1478,8 +1001,7 @@ const DOMAIN_RULES = [
     },
 
     {
-        name:
-            "الكهربية والدوائر",
+        name: "الكهربية والدوائر",
 
         keys: [
             "تيار",
@@ -1496,8 +1018,7 @@ const DOMAIN_RULES = [
     },
 
     {
-        name:
-            "المغناطيسية والحث",
+        name: "المغناطيسية والحث",
 
         keys: [
             "مجال مغناطيسي",
@@ -1513,8 +1034,7 @@ const DOMAIN_RULES = [
     },
 
     {
-        name:
-            "الموجات والاهتزازات",
+        name: "الموجات والاهتزازات",
 
         keys: [
             "موجة",
@@ -1529,8 +1049,7 @@ const DOMAIN_RULES = [
     },
 
     {
-        name:
-            "البصريات",
+        name: "البصريات",
 
         keys: [
             "عدسة",
@@ -1577,39 +1096,95 @@ const DOMAIN_RULES = [
             "نيوترون",
             "بروتون"
         ]
-    },
-
-    {
-        name:
-            "الكهرومغناطيسية المتقدمة",
-
-        keys: [
-            "ماكسويل",
-            "جاوس",
-            "أمبير-ماكسويل",
-            "موجة كهرومغناطيسية",
-            "استقطاب"
-        ]
     }
 ];
 
 /* =========================================================
-   UNIT NORMALIZATION
+   UNITS
 ========================================================= */
 
-function normalizeArabicUnits(
-    text
-) {
-    let output =
-        String(
-            text || ""
-        );
+const UNIT_FACTORS = {
+    mm: 1e-3,
+    cm: 1e-2,
+    km: 1e3,
+    m: 1,
+
+    mg: 1e-6,
+    g: 1e-3,
+    kg: 1,
+
+    N: 1,
+    kN: 1e3,
+    mN: 1e-3,
+
+    J: 1,
+    kJ: 1e3,
+
+    W: 1,
+    kW: 1e3,
+
+    Pa: 1,
+    kPa: 1e3,
+    MPa: 1e6,
+
+    V: 1,
+    mV: 1e-3,
+
+    A: 1,
+    mA: 1e-3,
+    uA: 1e-6,
+
+    C: 1,
+    mC: 1e-3,
+
+    ohm: 1,
+
+    Hz: 1,
+    kHz: 1e3,
+    MHz: 1e6,
+
+    s: 1,
+    ms: 1e-3,
+    min: 60,
+    h: 3600,
+
+    K: 1,
+
+    mol: 1
+};
+
+const UNIT_ALIASES = {
+    "م": "m",
+    "سم": "cm",
+    "مم": "mm",
+    "كم": "km",
+    "جرام": "g",
+    "غرام": "g",
+    "كجم": "kg",
+    "كيلوجرام": "kg",
+    "نيوتن": "N",
+    "جول": "J",
+    "وات": "W",
+    "باسكال": "Pa",
+    "فولت": "V",
+    "أمبير": "A",
+    "امبير": "A",
+    "ث": "s",
+    "ثانية": "s",
+    "دقيقة": "min",
+    "ساعة": "h"
+};
+
+/* =========================================================
+   NORMALIZE
+========================================================= */
+
+function normalizeArabicUnits(text) {
+    let output = String(text || "");
 
     for (
-        const [
-            arabic,
-            english
-        ] of Object.entries(
+        const [arabic, english]
+        of Object.entries(
             UNIT_ALIASES
         )
     ) {
@@ -1624,60 +1199,12 @@ function normalizeArabicUnits(
 }
 
 /* =========================================================
-   NUMBER
+   EXTRACT NUMBERS
 ========================================================= */
 
-function normalizeNumberToken(
-    raw
-) {
-    const value =
-        String(
-            raw || ""
-        )
-            .replace(
-                /,/g,
-                "."
-            )
-            .trim();
-
-    const number =
-        Number(
-            value
-        );
-
-    return Number.isFinite(
-        number
-    )
-        ? number
-        : null;
-}
-
-/* =========================================================
-   REGEX ESCAPE
-========================================================= */
-
-function escapeRegex(
-    value
-) {
-    return String(
-        value
-    ).replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-    );
-}
-
-/* =========================================================
-   EXTRACT QUANTITIES
-========================================================= */
-
-function extractQuantities(
-    text
-) {
+function extractQuantities(text) {
     const source =
-        normalizeArabicUnits(
-            text
-        )
+        normalizeArabicUnits(text)
             .replace(
                 /[٫٬]/g,
                 "."
@@ -1691,23 +1218,19 @@ function extractQuantities(
         "(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?";
 
     const unitPattern =
-        Object.keys(
-            UNIT_FACTORS
-        )
+        Object.keys(UNIT_FACTORS)
             .sort(
-                (
-                    a,
-                    b
-                ) =>
-                    b.length -
-                    a.length
+                (a, b) =>
+                    b.length - a.length
             )
             .map(
-                escapeRegex
+                x =>
+                    x.replace(
+                        /[.*+?^${}()|[\]\\]/g,
+                        "\\$&"
+                    )
             )
-            .join(
-                "|"
-            );
+            .join("|");
 
     const regex =
         new RegExp(
@@ -1720,36 +1243,31 @@ function extractQuantities(
     let match;
 
     while (
-        (match =
-            regex.exec(
-                source
-            )) &&
-        result.length <
-            80
+        (match = regex.exec(source)) &&
+        result.length < 80
     ) {
         const value =
-            normalizeNumberToken(
-                match[1]
+            Number(
+                String(
+                    match[1]
+                ).replace(
+                    /,/g,
+                    "."
+                )
             );
+
+        if (!Number.isFinite(value)) {
+            continue;
+        }
 
         const unit =
             match[2];
 
-        if (
-            value ===
-            null
-        ) {
-            continue;
-        }
-
         const factor =
-            UNIT_FACTORS[
-                unit
-            ] ?? 1;
+            UNIT_FACTORS[unit] ?? 1;
 
         result.push({
-            raw:
-                match[0],
+            raw: match[0],
 
             value,
 
@@ -1765,12 +1283,10 @@ function extractQuantities(
 }
 
 /* =========================================================
-   DOMAIN DETECTION
+   DETECT PHYSICS DOMAIN
 ========================================================= */
 
-function detectDomains(
-    text
-) {
+function detectDomains(text) {
     const source =
         normalizeArabicUnits(
             text
@@ -1779,12 +1295,14 @@ function detectDomains(
     const scores = [];
 
     for (
-        const rule of DOMAIN_RULES
+        const rule
+        of DOMAIN_RULES
     ) {
         let score = 0;
 
         for (
-            const key of rule.keys
+            const key
+            of rule.keys
         ) {
             if (
                 source.includes(
@@ -1794,20 +1312,15 @@ function detectDomains(
                 )
             ) {
                 score +=
-                    key.length >=
-                    8
+                    key.length >= 8
                         ? 2
                         : 1;
             }
         }
 
-        if (
-            score > 0
-        ) {
+        if (score > 0) {
             scores.push({
-                name:
-                    rule.name,
-
+                name: rule.name,
                 score
             });
         }
@@ -1815,17 +1328,11 @@ function detectDomains(
 
     return scores
         .sort(
-            (
-                a,
-                b
-            ) =>
+            (a, b) =>
                 b.score -
                 a.score
         )
-        .slice(
-            0,
-            5
-        );
+        .slice(0, 5);
 }
 
 /* =========================================================
@@ -1839,46 +1346,35 @@ function complexityScore(
     hasImage
 ) {
     const source =
-        String(
-            text || ""
-        );
+        String(text || "");
 
     let score = 0;
 
     if (
-        quantities.length >=
-        4
+        quantities.length >= 4
     ) {
         score += 2;
     }
 
     if (
-        quantities.length >=
-        8
+        quantities.length >= 8
     ) {
         score += 2;
     }
 
     if (
-        domains.length >=
-        2
+        domains.length >= 2
     ) {
         score += 2;
     }
 
-    if (
-        hasImage
-    ) {
+    if (hasImage) {
         score += 3;
     }
 
     if (
-        (
-            source.match(
-                /[=]/g
-            ) || []
-        ).length >=
-        2
+        (source.match(/[=]/g) || [])
+            .length >= 2
     ) {
         score += 2;
     }
@@ -1888,32 +1384,28 @@ function complexityScore(
             source.match(
                 /[+\-*/]/g
             ) || []
-        ).length >=
-        6
+        ).length >= 6
     ) {
         score += 1;
     }
 
     if (
-        /نظام معادلات|معادلات|تفاضل|تكامل|مصفوف|متجه|اشتقاق|أثبت|برهن|أقصى|أدنى|احتمال|دالة/.test(
-            source
-        )
+        /نظام معادلات|معادلات|تفاضل|تكامل|مصفوف|متجه|اشتقاق|أثبت|برهن|أقصى|أدنى|احتمال|دالة/
+            .test(source)
     ) {
         score += 3;
     }
 
     if (
-        /ثم|بعد ذلك|على التوالي|على التوازي|معًا|في نفس الوقت|يتصل|متصل/.test(
-            source
-        )
+        /ثم|بعد ذلك|على التوالي|على التوازي|معًا|في نفس الوقت|يتصل|متصل/
+            .test(source)
     ) {
         score += 2;
     }
 
     if (
-        /تصادم|بكرة|مستويين|دوائر|كيرتشوف|ماكسويل|نسبي|كمومي/.test(
-            source
-        )
+        /تصادم|بكرة|مستويين|دوائر|كيرتشوف|ماكسويل|نسبي|كمومي/
+            .test(source)
     ) {
         score += 2;
     }
@@ -1925,7 +1417,7 @@ function complexityScore(
 }
 
 /* =========================================================
-   PREFLIGHT
+   PRECHECK
 ========================================================= */
 
 function buildPreflight(
@@ -1947,17 +1439,13 @@ function buildPreflight(
             text,
             quantities,
             domains,
-            Boolean(
-                image
-            )
+            Boolean(image)
         );
 
-    const compactQuantities =
+    const values =
         quantities.map(
-            (
-                quantity
-            ) =>
-                `${quantity.raw} = ${quantity.siValue} SI`
+            item =>
+                `${item.raw} = ${item.siValue} ${item.unit}`
         );
 
     return {
@@ -1968,9 +1456,9 @@ function buildPreflight(
         complexity,
 
         promptBlock: `
-تحليل أولي للمسألة قبل الحل:
+تحليل أولي للسؤال:
 
-فروع الفيزياء المحتملة:
+الفروع المحتملة:
 ${
     domains.length
         ? domains
@@ -1978,256 +1466,477 @@ ${
                   x =>
                       x.name
               )
-              .join(
-                  "، "
-              )
+              .join("، ")
         : "غير محدد"
 }
 
 درجة التعقيد:
-${complexity}/15
+${complexity}
 
-القيم والوحدات التي تم العثور عليها:
+القيم الموجودة في السؤال:
 ${
-    compactQuantities.length
-        ? compactQuantities.join(
-              "\n"
-          )
-        : "لم يتم العثور على قيم رقمية بوحدات واضحة."
+    values.length
+        ? values.join("\n")
+        : "لا توجد قيم رقمية واضحة"
 }
 
-هذا التحليل مساعد فقط.
-راجع كل قيمة من السؤال والصورة قبل استخدامها.
-إذا تعارض التحليل مع السؤال، اعتمد على السؤال.
+لا تعتبر هذا التحليل حقيقة نهائية.
+راجع السؤال نفسه قبل استخدام أي قيمة.
 `
     };
 }
 
 /* =========================================================
-   CONSTANTS TEXT
+   QUESTION INTENT
 ========================================================= */
 
-function getPhysicsConstantsText() {
-    return `
-ثوابت مرجعية تستخدم عند الحاجة فقط:
+function detectQuestionIntent(text) {
+    const source =
+        String(
+            text || ""
+        ).trim();
 
-g = ${PHYSICS_CONSTANTS.g} m/s^2
-c = ${PHYSICS_CONSTANTS.c} m/s
-h = ${PHYSICS_CONSTANTS.h} J.s
-hbar = ${PHYSICS_CONSTANTS.hbar} J.s
-e = ${PHYSICS_CONSTANTS.e} C
-electron mass = ${PHYSICS_CONSTANTS.me} kg
-proton mass = ${PHYSICS_CONSTANTS.mp} kg
-epsilon0 = ${PHYSICS_CONSTANTS.eps0} F/m
-mu0 = ${PHYSICS_CONSTANTS.mu0} H/m
-G = ${PHYSICS_CONSTANTS.G} m^3/(kg.s^2)
-Boltzmann constant = ${PHYSICS_CONSTANTS.kB} J/K
-R = ${PHYSICS_CONSTANTS.R} J/(mol.K)
-Avogadro constant = ${PHYSICS_CONSTANTS.NA} 1/mol
-`;
+    const solve =
+        /حل|أوجد|احسب|استنتج|استخرج|جد|حل المسألة|هات الحل|عايز الحل|اعطني الحل|أعطني الحل|احسب قيمة|أوجد قيمة/
+            .test(source);
+
+    const explain =
+        /اشرح|فهمني|وضح|وضّح|ليه|لماذا|كيف|عايز أفهم|مش فاهم|فهمني الفكرة|اشرحلي|فسر|فسّر/
+            .test(source);
+
+    if (solve) {
+        return "solution";
+    }
+
+    if (explain) {
+        return "explanation";
+    }
+
+    return "normal";
 }
 
 /* =========================================================
-   RESPONSE STYLE
+   SIMPLE RESPONSE STYLE
+========================================================= */
+
+const SIMPLE_STYLE = `
+اكتب بالعربية المصرية السهلة.
+
+خليك واضح وطبيعي.
+
+ممنوع الإيموجي.
+
+ممنوع الرموز الغريبة.
+
+ممنوع LaTeX.
+
+ممنوع التنسيق الرياضي المعقد.
+
+ممنوع كتابة معادلات بالشكل البرمجي.
+
+ممنوع استخدام:
+*
+×
+÷
+^2
+^3
+√
+π
+θ
+ω
+λ
+وغيرها من الرموز التي ممكن تربك الطالب.
+
+بدل ذلك استخدم كلام بسيط.
+
+مثال:
+بدل v^2 اكتب "v تربيع".
+
+بدل √x اكتب "الجذر التربيعي لـ x".
+
+بدل x^3 اكتب "x تكعيب".
+
+بدل × اكتب كلمة "في".
+
+مثال:
+F = m في a
+
+مثال:
+KE = نصف في m في v تربيع
+
+مثال:
+v = d على t
+
+مثال:
+V = I في R
+
+لو المعادلة ممكن تتقال بالكلام بشكل أوضح، استخدم الكلام.
+
+خلي الطالب يقدر يقرأ الإجابة ويفهمها من أول مرة.
+`;
+
+/* =========================================================
+   AI INSTRUCTIONS
 ========================================================= */
 
 function buildExpertInstructions({
     complex,
     hasImage,
-    question
+    intent
 }) {
-    const source =
-        String(
-            question || ""
-        ).trim();
+    let instructions = `
+أنت Physics AI.
 
-    /*
-     * هل الطالب يريد حل مباشر؟
-     */
-    const asksForSolution =
-        /حل|أوجد|احسب|استنتج|استخرج|جد|احسب قيمة|أوجد قيمة|حل المسألة|هات الحل|عايز الحل|أعطني الحل/.test(
-            source
-        );
+أنت مدرس فيزياء شاطر جدًا لكن أسلوبك بسيط وواضح.
 
-    /*
-     * هل الطالب يريد شرحًا؟
-     */
-    const asksForExplanation =
-        /اشرح|فهمني|وضح|وضّح|ليه|لماذا|كيف|عايز أفهم|مش فاهم|فهمني الفكرة|اشرحلي|فسر|فسّر/.test(
-            source
-        );
+مهمتك إنك تفهم سؤال الطالب وتجاوب عليه بدقة.
 
-    const base = `
-أنت Physics AI، مدرس فيزياء محترف ومتخصص في حل المسائل وشرح الفيزياء.
+لا تخترع أي معلومة.
 
-أريد منك أن تتصرف كمدرس حقيقي، وليس كروبوت يكتب نصًا أكاديميًا جامدًا.
+لا تفترض رقمًا غير موجود.
 
-أسلوبك في الكلام:
+راجع الحسابات والوحدات.
 
-- استخدم العربية المصرية الطبيعية.
-- اجعل الكلام واضحًا ومباشرًا.
-- استخدم جملًا طبيعية مثل طريقة شرح مدرس محترف للطالب.
-- لا تستخدم إيموجي.
-- لا تستخدم زخارف.
-- لا تستخدم رموزًا غريبة.
-- لا تستخدم عناوين كثيرة.
-- لا تجعل الإجابة تبدو كأنها تقرير رسمي.
-- لا تبدأ بمقدمة طويلة.
-- لا تكرر السؤال بالكامل.
-- لا تكرر نفس الفكرة أكثر من مرة.
-- لا تستخدم Markdown بشكل مبالغ فيه.
-- لا تستخدم LaTeX.
-- لا تستخدم $$ أو \\[ أو \\].
-- لا تستخدم رموزًا رياضية زخرفية غير ضرورية.
-- اكتب المعادلات بطريقة نصية واضحة.
+لو السؤال ناقص، قل للطالب إن البيانات ناقصة.
 
-مثال لطريقة كتابة المعادلات:
+لو السؤال واضح، جاوب مباشرة.
 
-F = m a
-
-v = u + a t
-
-s = u t + 1/2 a t^2
-
-KE = 1/2 m v^2
-
-P = W / t
-
-اكتب الوحدات بطريقة طبيعية:
-
-m/s
-m/s^2
-N
-J
-kg
-Pa
-V
-A
-ohm
-
-لو احتجت رموزًا ضرورية مثل:
-sin
-cos
-theta
-omega
-lambda
-
-اكتبها بطريقة بسيطة بدل استخدام رموز زخرفية.
-
-قواعد الدقة:
-
-1. لا تخترع أي معطى.
-2. لا تغير أرقام السؤال.
-3. لا تفترض معلومة غير موجودة إلا إذا كان من الضروري عمل افتراض، وعندها قل بوضوح إنه افتراض.
-4. راجع العمليات الحسابية قبل إعطاء النتيجة.
-5. راجع الوحدات.
-6. راجع الإشارات والاتجاهات.
-7. راجع أن النتيجة منطقية فيزيائيًا.
-8. لو يوجد نقص أو تناقض في البيانات، وضحه بدل التخمين.
-9. لو يوجد أكثر من طريقة للحل، استخدم أوضح طريقة أولًا.
-10. في المسائل المركبة، افصل النظام إلى أجزاء ثم اجمع النتائج.
+${SIMPLE_STYLE}
 
 `;
 
-    const solutionMode =
-        asksForSolution
-            ? `
-الطالب يطلب حلًا مباشرًا.
+    if (
+        intent === "solution"
+    ) {
+        instructions += `
+الطالب طلب حل.
 
-إذن:
-- ابدأ بالإجابة والحل مباشرة.
-- لا تضيع الوقت في مقدمة نظرية.
-- اذكر النتيجة بوضوح.
-- بعدها وضح خطوات الوصول إليها.
-- لو هناك أكثر من مطلوب، أجب عن كل مطلوب بالترتيب.
-- القانون.
-- التعويض.
-- الحساب.
-- النتيجة.
-- الوحدة.
+مهم جدًا:
 
-لا تجعل الطالب يبحث عن الإجابة وسط الكلام.
-`
-            : "";
+اكتب الإجابة النهائية مباشرة فقط.
 
-    const explanationMode =
-        asksForExplanation
-            ? `
-الطالب يريد شرحًا وفهمًا.
+لا تكتب خطوات.
 
-إذن:
-- ابدأ بالفكرة الأساسية.
-- اشرح معنى الكميات الفيزيائية.
-- وضح لماذا نستخدم القانون.
-- وضح معنى كل خطوة.
-- لا تفترض أن الطالب يعرف الخطوة التالية.
-- استخدم مثالًا بسيطًا عندما يفيد الفهم.
-- بعد الفكرة، اشرح التطبيق الرياضي.
-`
-            : "";
+لا تكتب شرح.
 
-    const normalMode =
-        !asksForSolution &&
-        !asksForExplanation
-            ? `
-الطالب لم يحدد أسلوب الإجابة بشكل صريح.
+لا تكتب مقدمة.
 
-افهم طلبه من الكلام واختر الأسلوب المناسب.
-إذا كان يريد معلومة، أعطه المعلومة مباشرة.
-إذا كان يريد حلًا، أعطه الحل.
-إذا كان يريد فهمًا، اشرح.
-`
-            : "";
+لا تكتب طريقة الحل.
 
-    const complexMode =
-        complex
-            ? `
-هذه مسألة صعبة أو مركبة.
+لا تكتب "أولًا" أو "ثانيًا".
 
-قبل كتابة النتيجة:
-- حلها على مراحل.
-- عرّف المتغيرات.
-- افصل معادلات الأجزاء المختلفة.
-- راجع الحساب مرتين.
-- افحص الوحدات.
-- افحص النتيجة فيزيائيًا.
-- استخدم الطاقة أو الزخم أو قوانين نيوتن أو أي مبدأ مناسب كتحقق مستقل عندما يكون ذلك منطقيًا.
-- إذا كانت هناك حركة دورانية، فرّق بين الكميات الخطية والزاوية.
-- إذا كانت هناك دائرة كهربائية، تعامل مع التيارات والجهود بشكل واضح.
-- إذا كانت هناك مسألة موائع، راجع الاستمرارية والضغط وبرنولي عندما تكون مناسبة.
-- إذا كانت هناك موجات أو بصريات، راجع الإشارات والاتفاقيات.
-- إذا كانت هناك فيزياء حديثة، انتبه للوحدات والتحويلات.
-`
-            : "";
+لا تكرر السؤال.
 
-    const imageMode =
-        hasImage
-            ? `
-هناك صورة مرفقة.
+خلي الرد قصير وواضح.
 
-افحص الصورة بعناية.
-اقرأ الرسم والأرقام والوحدات والرموز.
-اربط عناصر الرسم بالمعادلات.
-إذا كانت قيمة أو كلمة غير واضحة، لا تخترعها.
-`
-            : "";
+مثال:
+
+الإجابة: 20 متر/ثانية
+
+ولو فيه أكثر من قيمة مطلوبة، اكتب كل نتيجة بوضوح.
+
+لا تعرض خطوات الحساب إلا لو الطالب طلب شرح صراحة.
+`;
+    } else if (
+        intent === "explanation"
+    ) {
+        instructions += `
+الطالب طلب شرح.
+
+هنا فقط اشرح بالتفصيل.
+
+ابدأ من الفكرة الأساسية.
+
+وضح معنى القانون.
+
+وضح لماذا نستخدم القانون.
+
+وضح الرموز بالكلام.
+
+استخدم مثال بسيط عند الحاجة.
+
+لو فيه عملية حسابية، اكتبها بطريقة سهلة.
+
+خلي الشرح تدريجي وواضح.
+
+ما تستخدمش تعقيد رياضي بدون داعي.
+`;
+    } else {
+        instructions += `
+الطالب لم يطلب حلًا بشكل مباشر ولم يطلب شرحًا بشكل مباشر.
+
+افهم المطلوب.
+
+لو محتاج نتيجة مباشرة، اعط النتيجة.
+
+لو السؤال محتاج توضيح، وضحه.
+
+لو سؤال نظري، جاوب بشكل بسيط.
+
+لو مسألة حسابية، حاول تكون مباشر وواضح.
+`;
+    }
+
+    if (complex) {
+        instructions += `
+السؤال ممكن يكون مركب.
+
+اهتم بالدقة جدًا.
+
+راجع كل المعطيات.
+
+راجع الوحدات.
+
+راجع النتيجة.
+
+لكن لا تعرض التعقيد للطالب إلا لو كان مطلوبًا.
+`;
+    }
+
+    if (hasImage) {
+        instructions += `
+يوجد صورة مع السؤال.
+
+اقرأ الصورة بعناية.
+
+اقرأ الأرقام والبيانات.
+
+لا تخترع أي رقم مش واضح.
+
+لو جزء من الصورة غير واضح، قل إن الجزء غير واضح.
+`;
+    }
 
     return (
-        base +
-        solutionMode +
-        explanationMode +
-        normalMode +
-        complexMode +
-        imageMode +
+        instructions +
         `
-ممنوع أن تجعل الإجابة مليئة بعناوين شكلية.
-استخدم العناوين فقط عندما تساعد الطالب فعلًا.
 
-الأولوية:
-الفهم + الدقة + الوضوح + الإجابة المباشرة.
-` +
-        getPhysicsConstantsText()
+ثوابت فيزيائية مرجعية عند الحاجة:
+
+g = ${PHYSICS_CONSTANTS.g}
+
+c = ${PHYSICS_CONSTANTS.c}
+
+h = ${PHYSICS_CONSTANTS.h}
+
+e = ${PHYSICS_CONSTANTS.e}
+
+G = ${PHYSICS_CONSTANTS.G}
+`
     );
+}
+
+/* =========================================================
+   CLEAN AI ANSWER
+========================================================= */
+
+function cleanPhysicsAnswer(text) {
+    let output =
+        String(
+            text || ""
+        ).trim();
+
+    if (!output) {
+        return "";
+    }
+
+    /* Remove code blocks */
+    output =
+        output.replace(
+            /```[a-zA-Z0-9_-]*/g,
+            ""
+        );
+
+    output =
+        output.replace(
+            /```/g,
+            ""
+        );
+
+    /* Remove heading marks */
+    output =
+        output.replace(
+            /^\s*#{1,6}\s*/gm,
+            ""
+        );
+
+    /* Remove bold */
+    output =
+        output.replace(
+            /\*\*(.*?)\*\*/gs,
+            "$1"
+        );
+
+    output =
+        output.replace(
+            /__(.*?)__/gs,
+            "$1"
+        );
+
+    /* Remove LaTeX wrappers */
+    output =
+        output.replace(
+            /\\\[/g,
+            ""
+        );
+
+    output =
+        output.replace(
+            /\\\]/g,
+            ""
+        );
+
+    output =
+        output.replace(
+            /\\\(/g,
+            ""
+        );
+
+    output =
+        output.replace(
+            /\\\)/g,
+            ""
+        );
+
+    /* LaTeX commands */
+    output =
+        output.replace(
+            /\\times/g,
+            " في "
+        );
+
+    output =
+        output.replace(
+            /\\cdot/g,
+            " في "
+        );
+
+    output =
+        output.replace(
+            /\\div/g,
+            " على "
+        );
+
+    output =
+        output.replace(
+            /\\sqrt\{([^{}]+)\}/g,
+            "الجذر التربيعي لـ $1"
+        );
+
+    output =
+        output.replace(
+            /\\pi/g,
+            "pi"
+        );
+
+    output =
+        output.replace(
+            /\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g,
+            "$1 على $2"
+        );
+
+    /* Regular symbols */
+    const replacements = {
+        "×": " في ",
+        "÷": " على ",
+        "*": " في ",
+        "−": "-",
+        "–": "-",
+        "—": "-",
+
+        "²": " تربيع",
+        "³": " تكعيب",
+        "⁴": " أس 4",
+        "⁵": " أس 5",
+
+        "√": "الجذر التربيعي لـ ",
+
+        "π": "pi",
+
+        "θ": "theta",
+        "φ": "phi",
+        "ω": "omega",
+        "λ": "lambda",
+        "μ": "mu",
+
+        "Δ": "التغير في ",
+        "δ": "دلتا"
+    };
+
+    for (
+        const [from, to]
+        of Object.entries(
+            replacements
+        )
+    ) {
+        output =
+            output.replaceAll(
+                from,
+                to
+            );
+    }
+
+    /* Convert common power style */
+    output =
+        output.replace(
+            /([A-Za-z\u0600-\u06FF0-9]+)\^2/g,
+            "$1 تربيع"
+        );
+
+    output =
+        output.replace(
+            /([A-Za-z\u0600-\u06FF0-9]+)\^3/g,
+            "$1 تكعيب"
+        );
+
+    output =
+        output.replace(
+            /([A-Za-z\u0600-\u06FF0-9]+)\^([4-9])/g,
+            "$1 أس $2"
+        );
+
+    /* Remove dollar signs */
+    output =
+        output.replace(
+            /\$/g,
+            ""
+        );
+
+    /* Remove emojis */
+    output =
+        output.replace(
+            /[\u{1F300}-\u{1FAFF}]/gu,
+            ""
+        );
+
+    output =
+        output.replace(
+            /[\u{2600}-\u{27BF}]/gu,
+            ""
+        );
+
+    /* Clean repeated spaces */
+    output =
+        output.replace(
+            /[ \t]{2,}/g,
+            " "
+        );
+
+    /* Clean spaces before punctuation */
+    output =
+        output.replace(
+            /\s+([،,.؟!])/g,
+            "$1"
+        );
+
+    /* Clean too many lines */
+    output =
+        output.replace(
+            /\n{3,}/g,
+            "\n\n"
+        );
+
+    return output.trim();
 }
 
 /* =========================================================
@@ -2239,32 +1948,17 @@ async function callGemini(
     systemInstruction,
     temperature = 0.2
 ) {
-    if (!ai) {
-        throw Object.assign(
-            new Error(
-                "GEMINI_API_KEY غير مضبوط في Environment Variables."
-            ),
-            {
-                status:
-                    500
-            }
-        );
-    }
+    return ai.models.generateContent({
+        model: GEMINI_MODEL,
 
-    return ai.models.generateContent(
-        {
-            model:
-                GEMINI_MODEL,
+        contents,
 
-            contents,
+        config: {
+            temperature,
 
-            config: {
-                temperature,
-
-                systemInstruction
-            }
+            systemInstruction
         }
-    );
+    });
 }
 
 /* =========================================================
@@ -2276,73 +1970,78 @@ async function verifyComplexAnswer({
     draft,
     contextText,
     preflight,
-    image
+    image,
+    intent
 }) {
     const verifierInstructions = `
-أنت الآن مراجع فيزياء مستقل.
+أنت مراجع فيزياء.
 
-راجع الحل بدقة شديدة.
+راجع الإجابة للتأكد من صحتها.
 
-افحص:
-- هل فهم السؤال بشكل صحيح؟
-- هل استخدم المعطيات الصحيحة؟
-- هل القوانين مناسبة؟
-- هل الاشتقاق صحيح؟
-- هل الحسابات صحيحة؟
-- هل الوحدات صحيحة؟
-- هل الإشارات والاتجاهات صحيحة؟
-- هل النتيجة منطقية؟
-- هل توجد افتراضات غير معلنة؟
-- هل الحل متوافق مع الصورة؟
+مهم جدًا:
 
-إذا وجدت خطأ:
-صححه.
+لو الطالب طلب حل فقط، لا تضف خطوات.
 
-إذا كان الحل صحيحًا:
-حافظ على النتيجة وحسّن وضوحها.
+لو الطالب طلب شرح، حافظ على الشرح.
 
-أخرج النسخة النهائية فقط.
+لا تضف رموز غريبة.
 
-اكتب بأسلوب عربي مصري طبيعي.
-لا تستخدم إيموجي.
-لا تستخدم رموزًا زخرفية.
 لا تستخدم LaTeX.
-لا تكتب التفكير الداخلي للمراجع.
 
-في النهاية يمكن إضافة جملة قصيرة:
-"تمت مراجعة الحسابات والوحدات والمنطق الفيزيائي."
-إذا كان ذلك صحيحًا.
+لا تستخدم:
+*
+×
+÷
+^2
+^3
+
+استخدم كلمات بسيطة.
+
+تأكد من:
+
+صحة النتيجة.
+
+صحة الوحدات.
+
+صحة القانون.
+
+عدم اختراع بيانات.
+
+وضوح الإجابة.
+
+لو الإجابة صحيحة اتركها كما هي مع تحسين بسيط للوضوح عند الحاجة.
+
+لو فيها خطأ صححه.
+
+لا تكتب تقرير مراجعة.
+
+لا تتكلم عن عملية المراجعة نفسها.
 `;
 
     const verifyText = `
-السؤال:
-
+سؤال الطالب:
 ${question}
 
-السياق:
+نوع الطلب:
+${intent}
 
 ${contextText}
 
-التحليل الأولي:
-
 ${preflight.promptBlock}
 
-الحل الأول:
-
+الإجابة الحالية:
 ${draft}
 `;
 
     const parts = [
         {
-            text:
-                verifyText
+            text: verifyText
         }
     ];
 
     if (
         image &&
-        typeof image ===
-            "string" &&
+        typeof image === "string" &&
         image.startsWith(
             "data:image/"
         )
@@ -2357,7 +2056,6 @@ ${draft}
                 inlineData: {
                     mimeType:
                         match[1],
-
                     data:
                         match[2]
                 }
@@ -2369,8 +2067,7 @@ ${draft}
         await callGemini(
             [
                 {
-                    role:
-                        "user",
+                    role: "user",
 
                     parts
                 }
@@ -2379,29 +2076,35 @@ ${draft}
             0.1
         );
 
-    return String(
-        response?.text ||
-            draft
-    ).trim();
+    return cleanPhysicsAnswer(
+        String(
+            response.text ||
+                draft
+        ).trim()
+    );
 }
 
 /* =========================================================
-   CHAT API
+   PHYSICS CHAT
 ========================================================= */
 
 app.post(
     "/api/chat",
     requireLogin,
-    async function (
-        req,
-        res
-    ) {
+    async function (req, res) {
         try {
             const message =
-                cleanText(
-                    req.body.message,
-                    50000
-                );
+                String(
+                    req.body.message ||
+                        ""
+                ).trim();
+
+            if (!message) {
+                return res.status(400).json({
+                    error:
+                        "اكتب سؤالك الأول."
+                });
+            }
 
             const history =
                 Array.isArray(
@@ -2413,66 +2116,80 @@ app.post(
                     : [];
 
             const grade =
-                cleanText(
-                    req.body.grade,
-                    200
-                );
+                String(
+                    req.body.grade ||
+                        ""
+                ).trim();
 
             const subject =
-                cleanText(
+                String(
                     req.body.subject ||
-                        "الفيزياء",
-                    200
-                );
+                        "الفيزياء"
+                ).trim();
 
             const unit =
-                cleanText(
-                    req.body.unit,
-                    300
-                );
+                String(
+                    req.body.unit ||
+                        ""
+                ).trim();
 
             const lesson =
-                cleanText(
-                    req.body.lesson,
-                    300
-                );
+                String(
+                    req.body.lesson ||
+                        ""
+                ).trim();
 
             const mode =
-                cleanText(
+                String(
                     req.body.mode ||
-                        "general",
-                    100
-                );
+                        ""
+                ).trim();
 
             const image =
                 req.body.image ||
                 null;
 
             if (
-                !message &&
-                !image
-            ) {
-                return res.status(
-                    400
-                ).json({
-                    error:
-                        "اكتب السؤال أو أرفق صورة."
-                });
-            }
-
-            if (
-                typeof image ===
-                    "string" &&
+                typeof image === "string" &&
                 image.length >
                     8_000_000
             ) {
-                return res.status(
-                    400
-                ).json({
+                return res.status(400).json({
                     error:
-                        "الصورة كبيرة جدًا. قلل حجمها ثم حاول مرة أخرى."
+                        "الصورة كبيرة جدًا."
                 });
             }
+
+            const contextText = `
+بيانات الطالب:
+
+الصف:
+${
+    grade ||
+    "غير محدد"
+}
+
+المادة:
+${subject}
+
+الوحدة:
+${
+    unit ||
+    "غير محدد"
+}
+
+الدرس:
+${
+    lesson ||
+    "غير محدد"
+}
+
+نوع الجلسة:
+${
+    mode ||
+    "دردشة عامة"
+}
+`;
 
             const preflight =
                 buildPreflight(
@@ -2484,66 +2201,28 @@ app.post(
                 preflight.complexity >=
                 5;
 
-            const contextText = `
-بيانات الجلسة:
-
-الصف:
-${grade || "غير محدد"}
-
-المادة:
-${subject}
-
-الوحدة:
-${unit || "غير محددة"}
-
-الدرس:
-${lesson || "غير محدد"}
-
-نوع الجلسة:
-${mode || "دردشة عامة"}
-`;
+            const intent =
+                detectQuestionIntent(
+                    message
+                );
 
             const systemInstructions =
-                `
-${buildExpertInstructions({
-    complex,
-    hasImage:
-        Boolean(image),
-    question:
-        message
-})}
-
-${contextText}
-
-${preflight.promptBlock}
-
-أهم قاعدة في هذه الرسالة:
-
-إذا الطالب طلب "حل":
-ابدأ بالحل والنتيجة مباشرة.
-
-إذا الطالب طلب "اشرح":
-اشرح الفكرة بالتفصيل وبأسلوب بسيط.
-
-إذا الطالب طلب معلومة:
-جاوبه مباشرة.
-
-لا تستخدم إيموجي.
-لا تستخدم رموزًا غريبة.
-لا تستخدم LaTeX.
-اكتب المعادلات بشكل نصي واضح.
-`;
+                buildExpertInstructions({
+                    complex,
+                    hasImage:
+                        Boolean(image),
+                    intent
+                });
 
             const contents = [];
 
-            /*
-             * التاريخ السابق للمحادثة.
-             */
             for (
-                const item of history
+                const item
+                of history
             ) {
                 if (
                     !item ||
+                    !item.role ||
                     !item.content
                 ) {
                     continue;
@@ -2569,21 +2248,23 @@ ${preflight.promptBlock}
                 });
             }
 
+            const currentText = `
+${systemInstructions}
+
+${contextText}
+
+${preflight.promptBlock}
+
+السؤال الحالي:
+${message}
+`;
+
             const currentParts = [
                 {
-                    text:
-                        systemInstructions +
-                        "\n\nرسالة الطالب الحالية:\n" +
-                        (
-                            message ||
-                            "حل السؤال الموجود في الصورة بالتفصيل."
-                        )
+                    text: currentText
                 }
             ];
 
-            /*
-             * الصورة.
-             */
             if (
                 image &&
                 typeof image ===
@@ -2602,7 +2283,6 @@ ${preflight.promptBlock}
                         inlineData: {
                             mimeType:
                                 match[1],
-
                             data:
                                 match[2]
                         }
@@ -2611,47 +2291,37 @@ ${preflight.promptBlock}
             }
 
             contents.push({
-                role:
-                    "user",
+                role: "user",
 
-                parts:
-                    currentParts
+                parts: currentParts
             });
 
             console.log(
-                "PHYSICS ENGINE:",
-                JSON.stringify(
-                    {
-                        model:
-                            GEMINI_MODEL,
+                "Physics Engine:",
+                JSON.stringify({
+                    complexity:
+                        preflight.complexity,
 
-                        complexity:
-                            preflight.complexity,
+                    complex,
 
-                        complex,
+                    intent,
 
-                        domains:
-                            preflight.domains.map(
-                                x =>
-                                    x.name
-                            ),
+                    domains:
+                        preflight.domains.map(
+                            x =>
+                                x.name
+                        ),
 
-                        quantities:
-                            preflight
-                                .quantities
-                                .length,
+                    quantities:
+                        preflight
+                            .quantities
+                            .length,
 
-                        image:
-                            Boolean(
-                                image
-                            )
-                    }
-                )
+                    image:
+                        Boolean(image)
+                })
             );
 
-            /*
-             * أول حل.
-             */
             const response =
                 await callGemini(
                     contents,
@@ -2662,71 +2332,67 @@ ${preflight.promptBlock}
                 );
 
             let answer =
-                String(
-                    response?.text ||
-                        ""
-                ).trim();
+                cleanPhysicsAnswer(
+                    String(
+                        response.text ||
+                            ""
+                    ).trim()
+                );
 
             if (!answer) {
-                return res.status(
-                    502
-                ).json({
+                return res.status(502).json({
                     error:
-                        "Gemini لم يرجع إجابة نصية. حاول مرة أخرى."
+                        "Gemini لم يرجع إجابة."
                 });
             }
 
             /*
-             * تحقق إضافي للمسائل الصعبة.
+             * المراجعة الثانية للمسائل المركبة
+             *
+             * لا نستخدمها في طلب الحل البسيط
+             * حتى يفضل الرد مباشرًا.
              */
-            let verified =
-                false;
 
             if (
                 complex &&
-                process.env
-                    .PHYSICS_VERIFY !==
+                intent !== "solution" &&
+                process.env.PHYSICS_VERIFY !==
                     "false"
             ) {
                 try {
-                    answer =
-                        await verifyComplexAnswer(
-                            {
-                                question:
-                                    message ||
-                                    "السؤال موجود في الصورة.",
+                    const verified =
+                        await verifyComplexAnswer({
+                            question:
+                                message,
 
-                                draft:
-                                    answer,
+                            draft:
+                                answer,
 
-                                contextText,
+                            contextText,
 
-                                preflight,
+                            preflight,
 
-                                image
-                            }
-                        );
+                            image,
 
-                    verified =
-                        true;
+                            intent
+                        });
+
+                    if (verified) {
+                        answer =
+                            verified;
+                    }
                 } catch (
                     verifyError
                 ) {
                     console.error(
-                        "PHYSICS VERIFY ERROR:",
+                        "VERIFY ERROR:",
                         verifyError
                     );
-
-                    /*
-                     * لو المراجعة فشلت،
-                     * نحتفظ بالحل الأول.
-                     */
                 }
             }
 
             res.json({
-                success:
-                    true,
+                success: true,
 
                 answer,
 
@@ -2735,23 +2401,31 @@ ${preflight.promptBlock}
                         "2.0",
 
                     complexity:
-                        preflight.complexity,
+                        preflight
+                            .complexity,
+
+                    intent,
 
                     domains:
-                        preflight.domains.map(
-                            x =>
-                                x.name
-                        ),
+                        preflight
+                            .domains
+                            .map(
+                                x =>
+                                    x.name
+                            ),
 
-                    verified
+                    verified:
+                        complex &&
+                        intent !==
+                            "solution" &&
+                        process.env
+                            .PHYSICS_VERIFY !==
+                            "false"
                 }
             });
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
-                "GEMINI PHYSICS ENGINE ERROR:",
+                "PHYSICS AI ERROR:",
                 error
             );
 
@@ -2762,63 +2436,26 @@ ${preflight.promptBlock}
                         500
                 );
 
-            if (
-                status ===
-                400
-            ) {
-                return res.status(
-                    400
-                ).json({
+            if (status === 429) {
+                return res.status(429).json({
                     error:
-                        error?.message ||
-                        "الطلب غير صحيح."
+                        "تم الوصول إلى حد الاستخدام الحالي. حاول بعد قليل."
                 });
             }
 
             if (
-                status ===
-                    401 ||
-                status ===
-                    403
+                status === 401 ||
+                status === 403
             ) {
-                return res.status(
-                    500
-                ).json({
+                return res.status(500).json({
                     error:
                         "مفتاح Gemini غير صحيح أو غير مصرح باستخدامه."
                 });
             }
 
-            if (
-                status ===
-                404
-            ) {
-                return res.status(
-                    500
-                ).json({
-                    error:
-                        `موديل Gemini غير متاح: ${GEMINI_MODEL}`
-                });
-            }
-
-            if (
-                status ===
-                429
-            ) {
-                return res.status(
-                    429
-                ).json({
-                    error:
-                        "تم الوصول إلى حد الاستخدام الحالي لـ Gemini. حاول بعد قليل."
-                });
-            }
-
-            res.status(
-                500
-            ).json({
+            res.status(500).json({
                 error:
-                    error?.message ||
-                    "حصل خطأ أثناء تشغيل Physics Engine."
+                    "حصل خطأ أثناء تشغيل Physics AI."
             });
         }
     }
@@ -2831,62 +2468,25 @@ ${preflight.promptBlock}
 app.post(
     "/api/transcribe",
     requireLogin,
-    audioUpload.single(
-        "audio"
-    ),
-    async function (
-        req,
-        res
-    ) {
+    audioUpload.single("audio"),
+    async function (req, res) {
         try {
             if (!req.file) {
-                return res.status(
-                    400
-                ).json({
+                return res.status(400).json({
                     error:
                         "لم يتم إرسال تسجيل صوتي."
                 });
             }
 
-            if (!ai) {
-                return res.status(
-                    500
-                ).json({
-                    error:
-                        "GEMINI_API_KEY غير مضبوط."
-                });
-            }
-
             if (
                 req.file.size >
-                19 *
-                    1024 *
-                    1024
+                19 * 1024 * 1024
             ) {
-                return res.status(
-                    400
-                ).json({
+                return res.status(400).json({
                     error:
                         "التسجيل كبير جدًا. استخدم تسجيلًا أقل من 19MB."
                 });
             }
-
-            console.log(
-                "AUDIO:",
-                {
-                    name:
-                        req.file
-                            .originalname,
-
-                    type:
-                        req.file
-                            .mimetype,
-
-                    size:
-                        req.file
-                            .size
-                }
-            );
 
             const audioBase64 =
                 req.file.buffer.toString(
@@ -2909,104 +2509,84 @@ app.post(
 
                         contents: [
                             {
-                                role:
-                                    "user",
+                                text: `
+استمع إلى التسجيل.
 
-                                parts: [
-                                    {
-                                        text: `
-استمع إلى التسجيل الصوتي.
+اكتب فقط كلام الطالب كنص.
 
-حوّل كلام الطالب إلى نص مكتوب فقط.
+استخدم العربية المصرية الطبيعية.
 
-الشروط:
-- العربية المصرية هي اللغة الأساسية.
-- حافظ على الكلمات العلمية والفيزيائية.
-- حافظ على الأرقام والوحدات.
-- لا تشرح.
-- لا تحل السؤال.
-- لا تضف كلامًا من عندك.
-- أخرج النص الذي قاله الطالب فقط.
+حافظ على المصطلحات العلمية والفيزيائية.
+
+لا تشرح.
+
+لا تحل السؤال.
+
+لا تضف أي كلام من عندك.
+
+لا تستخدم رموز غريبة.
 `
-                                    },
+                            },
 
-                                    {
-                                        inlineData:
-                                            {
-                                                mimeType,
-
-                                                data:
-                                                    audioBase64
-                                            }
-                                    }
-                                ]
+                            {
+                                inlineData: {
+                                    mimeType,
+                                    data:
+                                        audioBase64
+                                }
                             }
-                        ],
-
-                        config: {
-                            temperature:
-                                0.1
-                        }
+                        ]
                     }
                 );
 
             const text =
-                String(
-                    response?.text ||
-                        ""
-                ).trim();
-
-            if (!text) {
-                return res.status(
-                    502
-                ).json({
-                    error:
-                        "Gemini لم يرجع نصًا من التسجيل."
-                });
-            }
+                cleanPhysicsAnswer(
+                    String(
+                        response.text ||
+                            ""
+                    ).trim()
+                );
 
             res.json({
-                success:
-                    true,
-
+                success: true,
                 text
             });
-
-        } catch (
-            error
-        ) {
+        } catch (error) {
             console.error(
                 "TRANSCRIPTION ERROR:",
                 error
             );
 
-            const status =
-                Number(
-                    error?.status ||
-                        error?.statusCode ||
-                        500
-                );
-
-            if (
-                status ===
-                429
-            ) {
-                return res.status(
-                    429
-                ).json({
-                    error:
-                        "تم الوصول إلى حد استخدام Gemini. حاول بعد قليل."
-                });
-            }
-
-            res.status(
-                500
-            ).json({
+            res.status(500).json({
                 error:
-                    error?.message ||
                     "تعذر تحويل التسجيل الصوتي إلى نص."
             });
         }
+    }
+);
+
+/* =========================================================
+   HEALTH
+========================================================= */
+
+app.get(
+    "/api/health",
+    function (req, res) {
+        res.json({
+            success: true,
+
+            message:
+                "Physics AI is running",
+
+            model:
+                GEMINI_MODEL,
+
+            loggedIn:
+                Boolean(
+                    req.session &&
+                    req.session.userId
+                )
+        });
     }
 );
 
@@ -3027,58 +2607,51 @@ app.use(
         );
 
         if (
-            error?.code ===
-            "LIMIT_FILE_SIZE"
+            error &&
+            error.code ===
+                "LIMIT_FILE_SIZE"
         ) {
-            return res.status(
-                400
-            ).json({
+            return res.status(400).json({
                 error:
                     "حجم الملف كبير جدًا."
             });
         }
 
         if (
-            error?.message ===
-            "يسمح برفع الصور فقط."
+            error &&
+            error.message ===
+                "يسمح برفع الصور فقط."
         ) {
-            return res.status(
-                400
-            ).json({
+            return res.status(400).json({
                 error:
-                    error.message
+                    "يسمح برفع الصور فقط."
             });
         }
 
         if (
-            error?.message ===
-            "نوع الملف الصوتي غير مدعوم."
+            error &&
+            error.message ===
+                "نوع الملف الصوتي غير مدعوم."
         ) {
-            return res.status(
-                400
-            ).json({
+            return res.status(400).json({
                 error:
-                    error.message
+                    "نوع الملف الصوتي غير مدعوم."
             });
         }
 
         if (
-            error?.name ===
-            "MulterError"
+            error &&
+            error.name ===
+                "MulterError"
         ) {
-            return res.status(
-                400
-            ).json({
+            return res.status(400).json({
                 error:
-                    "حصل خطأ أثناء رفع الملف."
+                    "حصل خطأ في رفع الملف."
             });
         }
 
-        res.status(
-            500
-        ).json({
+        res.status(500).json({
             error:
-                error?.message ||
                 "حصل خطأ في السيرفر."
         });
     }
@@ -3088,101 +2661,36 @@ app.use(
    START SERVER
 ========================================================= */
 
-const server =
-    app.listen(
-        PORT,
-        "0.0.0.0",
-        function () {
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "Physics AI SERVER ONLINE"
-            );
-
-            console.log(
-                "PORT:",
-                PORT
-            );
-
-            console.log(
-                "MODEL:",
-                GEMINI_MODEL
-            );
-
-            console.log(
-                "NODE_ENV:",
-                process.env.NODE_ENV ||
-                    "development"
-            );
-
-            console.log(
-                "SESSION:",
-                "READY"
-            );
-
-            console.log(
-                "DATABASE:",
-                "READY"
-            );
-
-            console.log(
-                "PHYSICS ENGINE:",
-                "V2"
-            );
-
-            console.log(
-                "========================================"
-            );
-        }
-    );
-
-/* =========================================================
-   SHUTDOWN
-========================================================= */
-
-function shutdown(
-    signal
-) {
-    console.log(
-        `${signal} received...`
-    );
-
-    server.close(
-        function () {
-            try {
-                db.close();
-            } catch (
-                error
-            ) {
-                console.error(
-                    "DB CLOSE ERROR:",
-                    error
-                );
-            }
-
-            process.exit(
-                0
-            );
-        }
-    );
-}
-
-process.on(
-    "SIGINT",
+app.listen(
+    PORT,
     function () {
-        shutdown(
-            "SIGINT"
+        console.log(
+            `Physics AI running on port ${PORT}`
         );
-    }
-);
 
-process.on(
-    "SIGTERM",
-    function () {
-        shutdown(
-            "SIGTERM"
+        console.log(
+            "Model:",
+            GEMINI_MODEL
+        );
+
+        console.log(
+            "Authentication: READY"
+        );
+
+        console.log(
+            "Database: READY"
+        );
+
+        console.log(
+            "Physics AI: READY"
+        );
+
+        console.log(
+            "Audio: READY"
+        );
+
+        console.log(
+            "Image: READY"
         );
     }
 );
