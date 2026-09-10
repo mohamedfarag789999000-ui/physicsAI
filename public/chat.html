@@ -11,13 +11,2488 @@
     >
 
     <title>
-        Physics AI | المحادثة
+        Physics AI
     </title>
 
-    <link
-        rel="stylesheet"
-        href="chat.css"
+    <meta
+        name="description"
+        content="Physics AI - مدرس الفيزياء الذكي"
     >
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        rel="preconnect"
+        href="https://fonts.gstatic.com"
+        crossorigin
+    >
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+    >
+
+
+    <style>
+
+        /* =========================================================
+           ROOT
+        ========================================================= */
+
+        :root {
+
+            --bg:
+                #f7f7f8;
+
+            --bg-secondary:
+                #ffffff;
+
+            --sidebar:
+                #f0f0f1;
+
+            --surface:
+                #ffffff;
+
+            --surface-soft:
+                #f5f5f6;
+
+            --surface-hover:
+                #e9e9eb;
+
+            --border:
+                rgba(0,0,0,0.08);
+
+            --border-strong:
+                rgba(0,0,0,0.12);
+
+            --text:
+                #18181b;
+
+            --text-soft:
+                #55565c;
+
+            --text-muted:
+                #7a7b81;
+
+            --accent:
+                #6d5dfc;
+
+            --accent-hover:
+                #5c4cf0;
+
+            --accent-soft:
+                rgba(109,93,252,0.10);
+
+            --user-bubble:
+                #eeeeef;
+
+            --danger:
+                #dc6b6b;
+
+            --shadow:
+                0 10px 35px rgba(0,0,0,0.08);
+
+            --input-shadow:
+                0 7px 28px rgba(0,0,0,0.08);
+
+            --radius:
+                16px;
+
+            --sidebar-width:
+                280px;
+
+            --sidebar-collapsed:
+                0px;
+
+            --transition:
+                0.24s cubic-bezier(.4,0,.2,1);
+        }
+
+
+        /* =========================================================
+           DARK THEME
+        ========================================================= */
+
+        body.dark {
+
+            --bg:
+                #171717;
+
+            --bg-secondary:
+                #212121;
+
+            --sidebar:
+                #111111;
+
+            --surface:
+                #212121;
+
+            --surface-soft:
+                #2a2a2a;
+
+            --surface-hover:
+                #303030;
+
+            --border:
+                rgba(255,255,255,0.08);
+
+            --border-strong:
+                rgba(255,255,255,0.13);
+
+            --text:
+                #f5f5f5;
+
+            --text-soft:
+                #c4c4c4;
+
+            --text-muted:
+                #8f8f8f;
+
+            --accent:
+                #8b7cff;
+
+            --accent-hover:
+                #9b8eff;
+
+            --accent-soft:
+                rgba(139,124,255,0.13);
+
+            --user-bubble:
+                #2f2f2f;
+
+            --danger:
+                #ed8585;
+
+            --shadow:
+                0 18px 45px rgba(0,0,0,0.28);
+
+            --input-shadow:
+                0 12px 35px rgba(0,0,0,0.35);
+        }
+
+
+        /* =========================================================
+           RESET
+        ========================================================= */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+
+            overflow: hidden;
+
+            font-family:
+                "Cairo",
+                "Inter",
+                sans-serif;
+
+            background:
+                var(--bg);
+
+            color:
+                var(--text);
+
+            transition:
+                background var(--transition),
+                color var(--transition);
+        }
+
+        button,
+        textarea,
+        input {
+            font-family: inherit;
+        }
+
+        button {
+            border: 0;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+
+        /* =========================================================
+           APP
+        ========================================================= */
+
+        .app-shell {
+
+            width: 100%;
+            height: 100%;
+
+            display: flex;
+
+            background:
+                var(--bg);
+        }
+
+
+        /* =========================================================
+           SIDEBAR
+        ========================================================= */
+
+        .sidebar {
+
+            position: relative;
+
+            width:
+                var(--sidebar-width);
+
+            flex:
+                0 0 var(--sidebar-width);
+
+            height: 100%;
+
+            display: flex;
+            flex-direction: column;
+
+            background:
+                var(--sidebar);
+
+            border-left:
+                1px solid var(--border);
+
+            transition:
+                width var(--transition),
+                flex-basis var(--transition),
+                transform var(--transition);
+
+            z-index: 80;
+
+            overflow: hidden;
+        }
+
+
+        /* collapsed */
+
+        body.sidebar-collapsed .sidebar {
+
+            width:
+                0;
+
+            flex-basis:
+                0;
+
+            border-left:
+                0;
+        }
+
+
+        /* =========================================================
+           SIDEBAR HEADER
+        ========================================================= */
+
+        .sidebar-header {
+
+            height: 70px;
+
+            display: flex;
+            align-items: center;
+
+            padding:
+                0 13px;
+
+            gap: 9px;
+
+            border-bottom:
+                1px solid var(--border);
+        }
+
+
+        .sidebar-brand {
+
+            min-width:
+                0;
+
+            flex: 1;
+
+            display: flex;
+            align-items: center;
+
+            gap: 10px;
+        }
+
+
+        .brand-logo {
+
+            width: 36px;
+            height: 36px;
+
+            flex:
+                0 0 auto;
+
+            border-radius: 11px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            color: white;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #7969ff,
+                    #5b49dc
+                );
+
+            font-family:
+                "Inter",
+                sans-serif;
+
+            font-size: 15px;
+
+            font-weight: 800;
+
+            box-shadow:
+                0 6px 20px
+                rgba(101,84,232,0.22);
+        }
+
+
+        .brand-text {
+
+            min-width:
+                0;
+
+            display:
+                flex;
+
+            flex-direction:
+                column;
+
+            line-height:
+                1.35;
+        }
+
+
+        .brand-text strong {
+
+            font-size:
+                13px;
+
+            font-weight:
+                800;
+
+            white-space:
+                nowrap;
+        }
+
+
+        .brand-text span {
+
+            color:
+                var(--text-muted);
+
+            font-size:
+                8px;
+
+            white-space:
+                nowrap;
+        }
+
+
+        /* =========================================================
+           ICON BUTTON
+        ========================================================= */
+
+        .icon-btn {
+
+            width: 36px;
+            height: 36px;
+
+            flex:
+                0 0 auto;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius:
+                10px;
+
+            cursor:
+                pointer;
+
+            background:
+                transparent;
+
+            color:
+                var(--text-soft);
+
+            transition:
+                background var(--transition),
+                color var(--transition),
+                transform var(--transition);
+        }
+
+        .icon-btn:hover {
+
+            background:
+                var(--surface-hover);
+
+            color:
+                var(--text);
+
+            transform:
+                translateY(-1px);
+        }
+
+
+        /* =========================================================
+           NEW CHAT
+        ========================================================= */
+
+        .new-chat {
+
+            margin:
+                13px;
+
+            min-height:
+                44px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            gap:
+                8px;
+
+            border-radius:
+                11px;
+
+            cursor:
+                pointer;
+
+            color:
+                var(--text);
+
+            background:
+                var(--surface);
+
+            border:
+                1px solid
+                var(--border);
+
+            font-size:
+                11px;
+
+            font-weight:
+                700;
+
+            box-shadow:
+                0 2px 8px
+                rgba(0,0,0,0.03);
+
+            transition:
+                background var(--transition),
+                transform var(--transition),
+                border-color var(--transition);
+        }
+
+
+        .new-chat:hover {
+
+            background:
+                var(--surface-hover);
+
+            border-color:
+                var(--border-strong);
+
+            transform:
+                translateY(-1px);
+        }
+
+
+        .new-chat-plus {
+
+            width: 21px;
+            height: 21px;
+
+            border-radius:
+                6px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            background:
+                var(--accent-soft);
+
+            color:
+                var(--accent);
+
+            font-family:
+                "Inter",
+                sans-serif;
+
+            font-size:
+                15px;
+        }
+
+
+        /* =========================================================
+           SIDEBAR SECTION
+        ========================================================= */
+
+        .sidebar-section-title {
+
+            padding:
+                5px 16px 9px;
+
+            color:
+                var(--text-muted);
+
+            font-size:
+                9px;
+
+            font-weight:
+                700;
+        }
+
+
+        .conversation-list {
+
+            flex:
+                1;
+
+            min-height:
+                0;
+
+            overflow-y:
+                auto;
+
+            padding:
+                0 8px 10px;
+        }
+
+
+        .conversation-list::-webkit-scrollbar {
+
+            width:
+                6px;
+        }
+
+
+        .conversation-list::-webkit-scrollbar-thumb {
+
+            background:
+                rgba(120,120,120,.20);
+
+            border-radius:
+                999px;
+        }
+
+
+        /* =========================================================
+           CONVERSATIONS
+        ========================================================= */
+
+        .conversation-item {
+
+            width:
+                100%;
+
+            min-height:
+                42px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            text-align:
+                right;
+
+            padding:
+                0 10px;
+
+            margin-bottom:
+                3px;
+
+            border-radius:
+                9px;
+
+            cursor:
+                pointer;
+
+            color:
+                var(--text-soft);
+
+            background:
+                transparent;
+
+            font-size:
+                10px;
+
+            overflow:
+                hidden;
+
+            transition:
+                background var(--transition),
+                color var(--transition);
+        }
+
+
+        .conversation-item:hover {
+
+            background:
+                var(--surface-hover);
+
+            color:
+                var(--text);
+        }
+
+
+        .conversation-item.active {
+
+            background:
+                var(--surface);
+
+            color:
+                var(--text);
+
+            box-shadow:
+                0 1px 5px
+                rgba(0,0,0,0.04);
+        }
+
+
+        /* =========================================================
+           SIDEBAR BOTTOM
+        ========================================================= */
+
+        .sidebar-bottom {
+
+            padding:
+                10px;
+
+            border-top:
+                1px solid var(--border);
+        }
+
+
+        .sidebar-bottom-link {
+
+            width:
+                100%;
+
+            min-height:
+                42px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                10px;
+
+            padding:
+                0 10px;
+
+            border-radius:
+                9px;
+
+            color:
+                var(--text-soft);
+
+            font-size:
+                10px;
+
+            transition:
+                background var(--transition),
+                color var(--transition);
+        }
+
+
+        .sidebar-bottom-link:hover {
+
+            background:
+                var(--surface-hover);
+
+            color:
+                var(--text);
+        }
+
+
+        .sidebar-bottom-icon {
+
+            width:
+                28px;
+
+            height:
+                28px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            border-radius:
+                8px;
+
+            background:
+                var(--surface);
+
+            color:
+                var(--text-soft);
+
+            font-size:
+                10px;
+        }
+
+
+        /* =========================================================
+           MAIN
+        ========================================================= */
+
+        .main {
+
+            position:
+                relative;
+
+            min-width:
+                0;
+
+            flex:
+                1;
+
+            height:
+                100%;
+
+            display:
+                flex;
+
+            flex-direction:
+                column;
+
+            background:
+                var(--bg);
+        }
+
+
+        /* =========================================================
+           TOP HEADER
+        ========================================================= */
+
+        .main-header {
+
+            height:
+                64px;
+
+            flex:
+                0 0 auto;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            padding:
+                0 15px;
+
+            border-bottom:
+                1px solid var(--border);
+
+            background:
+                rgba(255,255,255,0.01);
+
+            backdrop-filter:
+                blur(14px);
+
+            z-index:
+                50;
+        }
+
+
+        body.dark .main-header {
+
+            background:
+                rgba(33,33,33,.72);
+        }
+
+
+        .header-left {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                9px;
+
+            min-width:
+                0;
+        }
+
+
+        .sidebar-toggle {
+
+            width:
+                38px;
+
+            height:
+                38px;
+
+            border-radius:
+                10px;
+
+            background:
+                transparent;
+
+            color:
+                var(--text-soft);
+
+            cursor:
+                pointer;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            font-size:
+                18px;
+
+            transition:
+                background var(--transition),
+                color var(--transition);
+        }
+
+
+        .sidebar-toggle:hover {
+
+            background:
+                var(--surface-hover);
+
+            color:
+                var(--text);
+        }
+
+
+        .mobile-title {
+
+            display:
+                none;
+
+            align-items:
+                center;
+
+            gap:
+                8px;
+
+            min-width:
+                0;
+        }
+
+
+        .mobile-title strong {
+
+            font-size:
+                12px;
+
+            white-space:
+                nowrap;
+
+            overflow:
+                hidden;
+
+            text-overflow:
+                ellipsis;
+        }
+
+
+        .mobile-title-dot {
+
+            width:
+                6px;
+
+            height:
+                6px;
+
+            border-radius:
+                50%;
+
+            background:
+                #72c994;
+        }
+
+
+        .header-center {
+
+            position:
+                absolute;
+
+            left:
+                50%;
+
+            transform:
+                translateX(-50%);
+
+            min-width:
+                0;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                7px;
+        }
+
+
+        .header-mode {
+
+            max-width:
+                280px;
+
+            overflow:
+                hidden;
+
+            text-overflow:
+                ellipsis;
+
+            white-space:
+                nowrap;
+
+            color:
+                var(--text-soft);
+
+            font-size:
+                10px;
+
+            font-weight:
+                700;
+        }
+
+
+        .header-right {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                5px;
+        }
+
+
+        .header-user {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                8px;
+
+            padding:
+                4px 8px 4px 10px;
+
+            border-radius:
+                10px;
+
+            background:
+                var(--surface);
+
+            border:
+                1px solid
+                var(--border);
+
+            max-width:
+                170px;
+        }
+
+
+        .header-avatar {
+
+            width:
+                28px;
+
+            height:
+                28px;
+
+            flex:
+                0 0 auto;
+
+            border-radius:
+                8px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            color:
+                #fff;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #7665ec,
+                    #503ec1
+                );
+
+            font-size:
+                9px;
+
+            font-weight:
+                800;
+        }
+
+
+        .header-user-name {
+
+            max-width:
+                95px;
+
+            overflow:
+                hidden;
+
+            text-overflow:
+                ellipsis;
+
+            white-space:
+                nowrap;
+
+            color:
+                var(--text-soft);
+
+            font-size:
+                9px;
+
+            font-weight:
+                700;
+        }
+
+
+        /* =========================================================
+           CHAT AREA
+        ========================================================= */
+
+        .chat {
+
+            flex:
+                1;
+
+            min-height:
+                0;
+
+            width:
+                min(
+                    940px,
+                    calc(100% - 34px)
+                );
+
+            margin:
+                0 auto;
+
+            overflow-y:
+                auto;
+
+            padding:
+                28px 5px 150px;
+
+            scrollbar-width:
+                thin;
+
+            scrollbar-color:
+                rgba(130,130,130,.25)
+                transparent;
+        }
+
+
+        .chat::-webkit-scrollbar {
+
+            width:
+                6px;
+        }
+
+
+        .chat::-webkit-scrollbar-track {
+
+            background:
+                transparent;
+        }
+
+
+        .chat::-webkit-scrollbar-thumb {
+
+            background:
+                rgba(120,120,120,.22);
+
+            border-radius:
+                999px;
+        }
+
+
+        /* =========================================================
+           WELCOME
+        ========================================================= */
+
+        .welcome {
+
+            min-height:
+                100%;
+
+            display:
+                flex;
+
+            flex-direction:
+                column;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            text-align:
+                center;
+
+            padding:
+                20px 12px 70px;
+        }
+
+
+        .welcome-logo {
+
+            width:
+                68px;
+
+            height:
+                68px;
+
+            margin-bottom:
+                22px;
+
+            border-radius:
+                20px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            font-family:
+                "Inter",
+                sans-serif;
+
+            font-size:
+                24px;
+
+            font-weight:
+                800;
+
+            color:
+                white;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #7969ff,
+                    #5642cb
+                );
+
+            box-shadow:
+                0 18px 50px
+                rgba(99,82,229,.25);
+        }
+
+
+        .welcome h1 {
+
+            font-size:
+                clamp(25px, 3vw, 35px);
+
+            line-height:
+                1.3;
+
+            font-weight:
+                800;
+
+            margin-bottom:
+                9px;
+        }
+
+
+        .welcome p {
+
+            max-width:
+                560px;
+
+            color:
+                var(--text-muted);
+
+            font-size:
+                11px;
+
+            line-height:
+                2;
+        }
+
+
+        /* =========================================================
+           QUICK PROMPTS
+        ========================================================= */
+
+        .quick-prompts {
+
+            width:
+                min(
+                    720px,
+                    100%
+                );
+
+            display:
+                grid;
+
+            grid-template-columns:
+                repeat(2, 1fr);
+
+            gap:
+                10px;
+
+            margin-top:
+                28px;
+        }
+
+
+        .quick-prompt {
+
+            min-height:
+                70px;
+
+            text-align:
+                right;
+
+            padding:
+                13px;
+
+            border-radius:
+                13px;
+
+            cursor:
+                pointer;
+
+            background:
+                var(--surface);
+
+            border:
+                1px solid
+                var(--border);
+
+            color:
+                var(--text-soft);
+
+            font-size:
+                10px;
+
+            line-height:
+                1.7;
+
+            transition:
+                background var(--transition),
+                border-color var(--transition),
+                transform var(--transition),
+                color var(--transition);
+        }
+
+
+        .quick-prompt:hover {
+
+            background:
+                var(--surface-hover);
+
+            border-color:
+                var(--border-strong);
+
+            color:
+                var(--text);
+
+            transform:
+                translateY(-2px);
+        }
+
+
+        /* =========================================================
+           MESSAGE
+        ========================================================= */
+
+        .message {
+
+            width:
+                100%;
+
+            display:
+                flex;
+
+            margin-bottom:
+                25px;
+
+            animation:
+                messageIn .20s ease;
+        }
+
+
+        @keyframes messageIn {
+
+            from {
+                opacity:
+                    0;
+
+                transform:
+                    translateY(6px);
+            }
+
+            to {
+                opacity:
+                    1;
+
+                transform:
+                    translateY(0);
+            }
+        }
+
+
+        .message.user {
+
+            justify-content:
+                flex-start;
+        }
+
+
+        .message.assistant {
+
+            justify-content:
+                flex-end;
+        }
+
+
+        .message-content {
+
+            max-width:
+                min(
+                    80%,
+                    760px
+                );
+
+            color:
+                var(--text);
+
+            font-size:
+                12px;
+
+            line-height:
+                2;
+
+            overflow-wrap:
+                anywhere;
+        }
+
+
+        .message.user .message-content {
+
+            padding:
+                11px 14px;
+
+            border-radius:
+                17px;
+
+            border-bottom-left-radius:
+                5px;
+
+            background:
+                var(--user-bubble);
+        }
+
+
+        .message.assistant .message-content {
+
+            padding:
+                4px 0;
+
+            background:
+                transparent;
+        }
+
+
+        .message-content img {
+
+            max-width:
+                100%;
+
+            border-radius:
+                13px;
+
+            margin-top:
+                8px;
+        }
+
+
+        /* =========================================================
+           COMPOSER AREA
+        ========================================================= */
+
+        .composer-area {
+
+            position:
+                absolute;
+
+            bottom:
+                0;
+
+            left:
+                0;
+
+            right:
+                0;
+
+            padding:
+                12px
+                16px
+                18px;
+
+            background:
+                linear-gradient(
+                    to top,
+                    var(--bg) 70%,
+                    transparent
+                );
+
+            z-index:
+                40;
+        }
+
+
+        .composer {
+
+            position:
+                relative;
+
+            width:
+                min(
+                    940px,
+                    100%
+                );
+
+            margin:
+                0 auto;
+
+            border:
+                1px solid
+                var(--border-strong);
+
+            border-radius:
+                19px;
+
+            background:
+                var(--surface);
+
+            box-shadow:
+                var(--input-shadow);
+
+            transition:
+                border-color var(--transition),
+                box-shadow var(--transition),
+                background var(--transition);
+        }
+
+
+        .composer:focus-within {
+
+            border-color:
+                rgba(109,93,252,.40);
+
+            box-shadow:
+                0 12px 40px
+                rgba(0,0,0,.10),
+                0 0 0 3px
+                rgba(109,93,252,.07);
+        }
+
+
+        body.dark .composer:focus-within {
+
+            box-shadow:
+                0 12px 40px
+                rgba(0,0,0,.38),
+                0 0 0 3px
+                rgba(139,124,255,.08);
+        }
+
+
+        /* =========================================================
+           TEXTAREA
+        ========================================================= */
+
+        .composer-main {
+
+            display:
+                flex;
+
+            align-items:
+                flex-end;
+
+            gap:
+                8px;
+
+            padding:
+                10px 10px 7px;
+        }
+
+
+        #messageInput {
+
+            flex:
+                1;
+
+            min-width:
+                0;
+
+            min-height:
+                46px;
+
+            max-height:
+                180px;
+
+            resize:
+                none;
+
+            border:
+                0;
+
+            outline:
+                0;
+
+            background:
+                transparent;
+
+            color:
+                var(--text);
+
+            font-size:
+                12px;
+
+            line-height:
+                1.9;
+
+            padding:
+                10px 4px;
+        }
+
+
+        #messageInput::placeholder {
+
+            color:
+                var(--text-muted);
+
+            opacity:
+                .8;
+        }
+
+
+        /* =========================================================
+           TOOLS
+        ========================================================= */
+
+        .composer-tools {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                3px;
+
+            flex:
+                0 0 auto;
+        }
+
+
+        .tool-button {
+
+            width:
+                34px;
+
+            height:
+                34px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            border-radius:
+                10px;
+
+            background:
+                transparent;
+
+            color:
+                var(--text-muted);
+
+            cursor:
+                pointer;
+
+            font-size:
+                13px;
+
+            transition:
+                background var(--transition),
+                color var(--transition);
+        }
+
+
+        .tool-button:hover {
+
+            background:
+                var(--surface-hover);
+
+            color:
+                var(--text);
+        }
+
+
+        .tool-button.recording {
+
+            color:
+                var(--danger);
+
+            background:
+                rgba(220,107,107,.09);
+        }
+
+
+        /* =========================================================
+           SEND
+        ========================================================= */
+
+        .send-button {
+
+            width:
+                40px;
+
+            height:
+                40px;
+
+            flex:
+                0 0 auto;
+
+            border-radius:
+                12px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            cursor:
+                pointer;
+
+            color:
+                #fff;
+
+            background:
+                var(--accent);
+
+            font-family:
+                "Inter",
+                sans-serif;
+
+            font-size:
+                18px;
+
+            transition:
+                background var(--transition),
+                transform var(--transition),
+                opacity var(--transition);
+        }
+
+
+        .send-button:hover {
+
+            background:
+                var(--accent-hover);
+
+            transform:
+                translateY(-1px);
+        }
+
+
+        .send-button:disabled {
+
+            opacity:
+                .40;
+
+            cursor:
+                not-allowed;
+
+            transform:
+                none;
+        }
+
+
+        /* =========================================================
+           HINT
+        ========================================================= */
+
+        .composer-footer {
+
+            min-height:
+                23px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            gap:
+                10px;
+
+            padding:
+                0 13px 8px;
+
+            color:
+                var(--text-muted);
+
+            font-size:
+                8px;
+        }
+
+
+        .composer-footer-left {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                7px;
+        }
+
+
+        .secure-dot {
+
+            width:
+                5px;
+
+            height:
+                5px;
+
+            border-radius:
+                50%;
+
+            background:
+                #7bc99c;
+        }
+
+
+        /* =========================================================
+           IMAGE PREVIEW
+        ========================================================= */
+
+        .image-preview {
+
+            position:
+                absolute;
+
+            bottom:
+                112px;
+
+            left:
+                50%;
+
+            transform:
+                translateX(-50%);
+
+            width:
+                min(
+                    940px,
+                    calc(100% - 34px)
+                );
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                10px;
+
+            padding:
+                9px;
+
+            border:
+                1px solid
+                var(--border-strong);
+
+            border-radius:
+                14px;
+
+            background:
+                var(--surface);
+
+            box-shadow:
+                var(--shadow);
+
+            z-index:
+                60;
+        }
+
+
+        .image-preview.hidden {
+
+            display:
+                none;
+        }
+
+
+        #previewImage {
+
+            width:
+                56px;
+
+            height:
+                56px;
+
+            object-fit:
+                cover;
+
+            border-radius:
+                10px;
+        }
+
+
+        .preview-label {
+
+            flex:
+                1;
+
+            min-width:
+                0;
+
+            color:
+                var(--text-soft);
+
+            font-size:
+                9px;
+        }
+
+
+        #removeImageButton {
+
+            width:
+                31px;
+
+            height:
+                31px;
+
+            border-radius:
+                9px;
+
+            background:
+                var(--surface-soft);
+
+            color:
+                var(--text-muted);
+
+            cursor:
+                pointer;
+
+            font-size:
+                17px;
+        }
+
+
+        #removeImageButton:hover {
+
+            color:
+                var(--danger);
+
+            background:
+                rgba(220,107,107,.08);
+        }
+
+
+        /* =========================================================
+           VOICE
+        ========================================================= */
+
+        .voice-status {
+
+            width:
+                min(
+                    940px,
+                    calc(100% - 34px)
+                );
+
+            min-height:
+                16px;
+
+            margin:
+                0 auto 3px;
+
+            text-align:
+                center;
+
+            color:
+                var(--text-muted);
+
+            font-size:
+                8px;
+        }
+
+
+        /* =========================================================
+           CAMERA MODAL
+        ========================================================= */
+
+        .modal {
+
+            position:
+                fixed;
+
+            inset:
+                0;
+
+            z-index:
+                300;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            padding:
+                18px;
+
+            background:
+                rgba(0,0,0,.58);
+
+            backdrop-filter:
+                blur(7px);
+        }
+
+
+        .modal.hidden {
+
+            display:
+                none;
+        }
+
+
+        .modal-card {
+
+            width:
+                min(
+                    560px,
+                    100%
+                );
+
+            padding:
+                14px;
+
+            border:
+                1px solid
+                var(--border-strong);
+
+            border-radius:
+                20px;
+
+            background:
+                var(--surface);
+
+            box-shadow:
+                0 30px 90px
+                rgba(0,0,0,.30);
+        }
+
+
+        .modal-header {
+
+            min-height:
+                38px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            gap:
+                15px;
+
+            padding:
+                0 2px 10px;
+        }
+
+
+        .modal-header h3 {
+
+            font-size:
+                13px;
+
+            font-weight:
+                800;
+        }
+
+
+        #closeCameraButton {
+
+            width:
+                34px;
+
+            height:
+                34px;
+
+            border-radius:
+                9px;
+
+            background:
+                var(--surface-soft);
+
+            color:
+                var(--text-muted);
+
+            cursor:
+                pointer;
+
+            font-size:
+                19px;
+        }
+
+
+        #cameraVideo {
+
+            display:
+                block;
+
+            width:
+                100%;
+
+            max-height:
+                65vh;
+
+            min-height:
+                260px;
+
+            object-fit:
+                cover;
+
+            border-radius:
+                14px;
+
+            background:
+                #000;
+        }
+
+
+        .capture-button {
+
+            width:
+                100%;
+
+            height:
+                48px;
+
+            margin-top:
+                10px;
+
+            border-radius:
+                12px;
+
+            cursor:
+                pointer;
+
+            color:
+                white;
+
+            background:
+                var(--accent);
+
+            font-size:
+                11px;
+
+            font-weight:
+                800;
+        }
+
+
+        .capture-button:hover {
+
+            background:
+                var(--accent-hover);
+        }
+
+
+        .camera-error {
+
+            min-height:
+                18px;
+
+            margin-top:
+                7px;
+
+            text-align:
+                center;
+
+            color:
+                var(--danger);
+
+            font-size:
+                8px;
+        }
+
+
+        /* =========================================================
+           MOBILE OVERLAY
+        ========================================================= */
+
+        .sidebar-overlay {
+
+            display:
+                none;
+
+            position:
+                fixed;
+
+            inset:
+                0;
+
+            z-index:
+                70;
+
+            background:
+                rgba(0,0,0,.40);
+        }
+
+
+        /* =========================================================
+           RESPONSIVE
+        ========================================================= */
+
+        @media (max-width: 900px) {
+
+            .header-center {
+                display: none;
+            }
+
+            .mobile-title {
+                display: flex;
+            }
+
+        }
+
+
+        @media (max-width: 700px) {
+
+            .sidebar {
+
+                position:
+                    fixed;
+
+                top:
+                    0;
+
+                right:
+                    0;
+
+                height:
+                    100%;
+
+                width:
+                    min(
+                        290px,
+                        86vw
+                    );
+
+                flex-basis:
+                    auto;
+
+                transform:
+                    translateX(100%);
+
+                box-shadow:
+                    -20px 0 45px
+                    rgba(0,0,0,.16);
+            }
+
+
+            body.mobile-sidebar-open .sidebar {
+
+                transform:
+                    translateX(0);
+            }
+
+
+            body.mobile-sidebar-open
+            .sidebar-overlay {
+
+                display:
+                    block;
+            }
+
+
+            body.sidebar-collapsed .sidebar {
+
+                width:
+                    min(
+                        290px,
+                        86vw
+                    );
+
+                flex-basis:
+                    auto;
+            }
+
+
+            .chat {
+
+                width:
+                    calc(100% - 18px);
+
+                padding:
+                    20px 4px 150px;
+            }
+
+
+            .message-content {
+
+                max-width:
+                    92%;
+            }
+
+
+            .composer-area {
+
+                padding:
+                    8px
+                    8px
+                    12px;
+            }
+
+
+            .composer {
+
+                border-radius:
+                    17px;
+            }
+
+
+            .composer-footer {
+
+                padding:
+                    0 11px 7px;
+            }
+
+
+            .quick-prompts {
+
+                grid-template-columns:
+                    1fr;
+
+                margin-top:
+                    21px;
+            }
+
+
+            .quick-prompt {
+
+                min-height:
+                    58px;
+            }
+
+
+            .header-user-name {
+
+                display:
+                    none;
+            }
+
+        }
+
+
+        @media (max-width: 470px) {
+
+            .main-header {
+
+                height:
+                    58px;
+
+                padding:
+                    0 8px;
+            }
+
+
+            .header-right {
+
+                gap:
+                    1px;
+            }
+
+
+            .header-user {
+
+                padding:
+                    3px;
+                }
+
+                .header-avatar {
+
+                    width:
+                        28px;
+
+                    height:
+                        28px;
+                }
+
+
+            .header-right .theme-label {
+
+                display:
+                    none;
+            }
+
+
+            .welcome-logo {
+
+                width:
+                    58px;
+
+                height:
+                    58px;
+
+                border-radius:
+                    18px;
+
+                font-size:
+                    21px;
+            }
+
+
+            .welcome h1 {
+
+                font-size:
+                    22px;
+            }
+
+
+            .welcome p {
+
+                font-size:
+                    9px;
+            }
+
+
+            #messageInput {
+
+                font-size:
+                    11px;
+
+                min-height:
+                    42px;
+            }
+
+
+            .tool-button {
+
+                width:
+                    31px;
+
+                height:
+                    31px;
+            }
+
+
+            .send-button {
+
+                width:
+                    38px;
+
+                height:
+                    38px;
+            }
+
+        }
+
+    </style>
 
 </head>
 
@@ -25,321 +2500,1069 @@
 <body>
 
 
-<header class="chat-topbar">
+    <!-- =========================================================
+         APP
+    ========================================================== -->
 
-    <div class="chat-brand">
-
-        <div class="chat-logo">
-            ⚛️
-        </div>
-
-        <div>
-
-            <strong>
-                Physics AI
-            </strong>
-
-            <span>
-                مدرس الفيزياء الذكي
-            </span>
-
-        </div>
-
-    </div>
+    <div class="app-shell">
 
 
-    <div class="top-actions">
-
-        <span
-            id="userName"
-            class="user-name"
-        >
-        </span>
-
-        <button
-            id="logoutButton"
-            class="logout-button"
-        >
-            خروج
-        </button>
-
-    </div>
-
-</header>
-
-
-<div class="chat-layout">
-
-
-    <!-- SIDEBAR -->
-
-    <aside
-        class="sidebar"
-        id="sidebar"
-    >
-
-        <button
-            id="newChatButton"
-            class="new-chat"
-        >
-            ＋ محادثة جديدة
-        </button>
-
-
-        <div class="sidebar-title">
-            محادثاتك
-        </div>
-
+        <!-- =====================================================
+             SIDEBAR OVERLAY
+        ====================================================== -->
 
         <div
-            id="conversationList"
-            class="conversation-list"
+            class="sidebar-overlay"
+            id="sidebarOverlay"
         ></div>
 
 
-        <a
-            href="/study.html"
-            class="study-link"
-        >
-            📚 المناهج والموسوعة
-        </a>
+        <!-- =====================================================
+             SIDEBAR
+        ====================================================== -->
 
-    </aside>
-
-
-    <!-- MAIN -->
-
-    <main class="chat-main">
-
-
-        <!-- LESSON INFO -->
-
-        <div
-            class="lesson-bar"
-            id="lessonBar"
+        <aside
+            class="sidebar"
+            id="sidebar"
         >
 
-            <div>
 
-                <span
-                    id="chatMode"
-                    class="lesson-badge"
-                >
-                    Physics AI
-                </span>
+            <!-- HEADER -->
 
-                <h2
-                    id="lessonName"
-                >
-                    دردشة عامة
-                </h2>
-
-                <p
-                    id="lessonDescription"
-                >
-                    اسأل Physics AI عن الفيزياء.
-                </p>
-
-            </div>
-
-        </div>
+            <div class="sidebar-header">
 
 
-        <!-- CHAT -->
+                <div class="sidebar-brand">
 
-        <div
-            id="chat"
-            class="chat"
-        >
+                    <div class="brand-logo">
+                        P
+                    </div>
 
-            <div class="welcome">
+                    <div class="brand-text">
 
-                <div class="welcome-icon">
-                    ⚛️
+                        <strong>
+                            Physics AI
+                        </strong>
+
+                        <span>
+                            مدرس الفيزياء الذكي
+                        </span>
+
+                    </div>
+
                 </div>
 
-                <h1>
-                    أهلًا بيك في Physics AI 👋
-                </h1>
-
-                <p>
-                    اسألني، ابعت مسألة، صوّر السؤال،
-                    أو سجل صوتك وأنا هساعدك.
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <!-- IMAGE PREVIEW -->
-
-        <div
-            id="imagePreview"
-            class="image-preview hidden"
-        >
-
-            <img
-                id="previewImage"
-                alt="الصورة"
-            >
-
-            <button
-                id="removeImageButton"
-                type="button"
-            >
-                ×
-            </button>
-
-        </div>
-
-
-        <!-- INPUT -->
-
-        <div class="input-wrapper">
-
-            <div class="tools">
 
                 <button
-                    id="uploadButton"
-                    class="tool-button"
-                    title="رفع صورة"
+                    class="icon-btn"
+                    id="sidebarCloseButton"
+                    type="button"
+                    title="إخفاء الشريط الجانبي"
+                    aria-label="إخفاء الشريط الجانبي"
                 >
-                    🖼️
+                    ‹
                 </button>
 
-
-                <button
-                    id="cameraButton"
-                    class="tool-button"
-                    title="الكاميرا"
-                >
-                    📷
-                </button>
-
-
-                <button
-                    id="voiceButton"
-                    class="tool-button"
-                    title="تسجيل صوت"
-                >
-                    🎙️
-                </button>
-
-
-                <input
-                    type="file"
-                    id="imageInput"
-                    accept="image/*"
-                    hidden
-                >
-
-
-                <input
-                    type="file"
-                    id="cameraInput"
-                    accept="image/*"
-                    capture="environment"
-                    hidden
-                >
 
             </div>
 
 
-            <textarea
-                id="messageInput"
-                rows="1"
-                placeholder="اكتب سؤالك هنا..."
-            ></textarea>
-
+            <!-- NEW CHAT -->
 
             <button
-                id="sendButton"
-                class="send-button"
-            >
-                ↑
-            </button>
-
-        </div>
-
-
-        <div
-            id="voiceStatus"
-            class="voice-status"
-        ></div>
-
-
-        <div class="input-hint">
-
-            Enter للإرسال
-            <span>•</span>
-            Shift + Enter لسطر جديد
-
-        </div>
-
-    </main>
-
-</div>
-
-
-<!-- CAMERA MODAL -->
-
-<div
-    id="cameraModal"
-    class="modal hidden"
->
-
-    <div class="modal-card">
-
-        <div class="modal-header">
-
-            <h3>
-                تصوير المسألة
-            </h3>
-
-            <button
-                id="closeCameraButton"
+                id="newChatButton"
+                class="new-chat"
                 type="button"
             >
-                ×
+
+                <span class="new-chat-plus">
+                    +
+                </span>
+
+                <span>
+                    محادثة جديدة
+                </span>
+
             </button>
 
-        </div>
+
+            <!-- TITLE -->
+
+            <div class="sidebar-section-title">
+                محادثاتك
+            </div>
 
 
-        <video
-            id="cameraVideo"
-            autoplay
-            playsinline
-        ></video>
+            <!-- CONVERSATIONS -->
+
+            <div
+                id="conversationList"
+                class="conversation-list"
+            ></div>
 
 
-        <canvas
-            id="cameraCanvas"
-            hidden
-        ></canvas>
+            <!-- BOTTOM -->
+
+            <div class="sidebar-bottom">
 
 
-        <button
-            id="takePhotoButton"
-            class="capture-button"
-            type="button"
-        >
-            📷 التقاط الصورة
-        </button>
+                <a
+                    href="/study.html"
+                    class="sidebar-bottom-link"
+                >
+
+                    <span class="sidebar-bottom-icon">
+                        P
+                    </span>
+
+                    <span>
+                        مساحة الدراسة
+                    </span>
+
+                </a>
 
 
-        <p
-            id="cameraError"
-            class="camera-error"
-        ></p>
+            </div>
+
+
+        </aside>
+
+
+        <!-- =====================================================
+             MAIN
+        ====================================================== -->
+
+        <main class="main">
+
+
+            <!-- =================================================
+                 TOP HEADER
+            ================================================== -->
+
+            <header class="main-header">
+
+
+                <div class="header-left">
+
+
+                    <button
+                        id="sidebarToggleButton"
+                        class="sidebar-toggle"
+                        type="button"
+                        title="إظهار / إخفاء الشريط الجانبي"
+                        aria-label="إظهار / إخفاء الشريط الجانبي"
+                    >
+                        ☰
+                    </button>
+
+
+                    <div class="mobile-title">
+
+                        <span
+                            class="mobile-title-dot"
+                        ></span>
+
+                        <strong>
+                            Physics AI
+                        </strong>
+
+                    </div>
+
+
+                </div>
+
+
+                <div class="header-center">
+
+                    <span class="header-mode">
+                        <span id="chatMode">
+                            Physics AI
+                        </span>
+
+                        —
+
+                        <span id="lessonName">
+                            دردشة عامة
+                        </span>
+
+                    </span>
+
+                </div>
+
+
+                <div class="header-right">
+
+
+                    <!-- THEME -->
+
+                    <button
+                        id="themeToggle"
+                        class="icon-btn"
+                        type="button"
+                        title="تغيير الوضع"
+                        aria-label="تغيير الوضع"
+                    >
+                        ◐
+                    </button>
+
+
+                    <!-- USER -->
+
+                    <div class="header-user">
+
+                        <div
+                            id="topUserAvatar"
+                            class="header-avatar"
+                        >
+                            P
+                        </div>
+
+                        <span
+                            id="userName"
+                            class="header-user-name"
+                        >
+                            جاري التحميل...
+                        </span>
+
+                    </div>
+
+
+                    <!-- LOGOUT -->
+
+                    <button
+                        id="logoutButton"
+                        class="icon-btn"
+                        type="button"
+                        title="تسجيل الخروج"
+                        aria-label="تسجيل الخروج"
+                    >
+                        ↪
+                    </button>
+
+
+                </div>
+
+
+            </header>
+
+
+            <!-- =================================================
+                 CHAT
+            ================================================== -->
+
+            <div
+                id="chat"
+                class="chat"
+            >
+
+
+                <div class="welcome">
+
+
+                    <div class="welcome-logo">
+                        P
+                    </div>
+
+
+                    <h1>
+                        أهلاً بيك في Physics AI
+                    </h1>
+
+
+                    <p id="lessonDescription">
+                        اسأل، ناقش، حل، أو ابعت صورة لمسألة
+                        وأنا هساعدك خطوة بخطوة.
+                    </p>
+
+
+                    <div class="quick-prompts">
+
+
+                        <button
+                            class="quick-prompt"
+                            type="button"
+                            data-prompt="اشرحلي الدرس ده من البداية وبطريقة بسيطة جدًا"
+                        >
+                            اشرحلي الدرس من البداية
+                        </button>
+
+
+                        <button
+                            class="quick-prompt"
+                            type="button"
+                            data-prompt="قولّي أهم القوانين في الدرس واشرحلي كل قانون بيستخدم إمتى"
+                        >
+                            أهم القوانين واستخداماتها
+                        </button>
+
+
+                        <button
+                            class="quick-prompt"
+                            type="button"
+                            data-prompt="اديني مسألة على الدرس وحلها معايا خطوة بخطوة"
+                        >
+                            حل مسألة معايا
+                        </button>
+
+
+                        <button
+                            class="quick-prompt"
+                            type="button"
+                            data-prompt="اختبرني في الدرس بأسئلة متدرجة من السهل للصعب"
+                        >
+                            اختبرني في الدرس
+                        </button>
+
+
+                    </div>
+
+
+                </div>
+
+
+            </div>
+
+
+            <!-- =================================================
+                 IMAGE PREVIEW
+            ================================================== -->
+
+            <div
+                id="imagePreview"
+                class="image-preview hidden"
+            >
+
+                <img
+                    id="previewImage"
+                    alt="الصورة المختارة"
+                >
+
+
+                <span class="preview-label">
+                    الصورة جاهزة للإرسال
+                </span>
+
+
+                <button
+                    id="removeImageButton"
+                    type="button"
+                    aria-label="إزالة الصورة"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <!-- =================================================
+                 COMPOSER
+            ================================================== -->
+
+            <div class="composer-area">
+
+
+                <div
+                    id="voiceStatus"
+                    class="voice-status"
+                ></div>
+
+
+                <div class="composer">
+
+
+                    <div class="composer-main">
+
+
+                        <!-- TOOLS -->
+
+                        <div class="composer-tools">
+
+
+                            <button
+                                id="uploadButton"
+                                class="tool-button"
+                                type="button"
+                                title="رفع صورة"
+                                aria-label="رفع صورة"
+                            >
+                                ⊕
+                            </button>
+
+
+                            <button
+                                id="cameraButton"
+                                class="tool-button"
+                                type="button"
+                                title="استخدام الكاميرا"
+                                aria-label="استخدام الكاميرا"
+                            >
+                                ◉
+                            </button>
+
+
+                            <button
+                                id="voiceButton"
+                                class="tool-button"
+                                type="button"
+                                title="تسجيل صوت"
+                                aria-label="تسجيل صوت"
+                            >
+                                ●
+                            </button>
+
+
+                            <input
+                                id="imageInput"
+                                type="file"
+                                accept="image/*"
+                                hidden
+                            >
+
+
+                            <input
+                                id="cameraInput"
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                hidden
+                            >
+
+
+                        </div>
+
+
+                        <!-- TEXT -->
+
+                        <textarea
+                            id="messageInput"
+                            rows="1"
+                            placeholder="اكتب سؤالك هنا..."
+                            autocomplete="off"
+                        ></textarea>
+
+
+                        <!-- SEND -->
+
+                        <button
+                            id="sendButton"
+                            class="send-button"
+                            type="button"
+                            title="إرسال"
+                            aria-label="إرسال"
+                        >
+                            ↑
+                        </button>
+
+
+                    </div>
+
+
+                    <!-- FOOTER -->
+
+                    <div class="composer-footer">
+
+
+                        <div class="composer-footer-left">
+
+                            <span class="secure-dot"></span>
+
+                            <span>
+                                Physics AI جاهز للمساعدة
+                            </span>
+
+                        </div>
+
+
+                        <span>
+                            Enter للإرسال
+                        </span>
+
+
+                    </div>
+
+
+                </div>
+
+            </div>
+
+
+        </main>
+
 
     </div>
 
-</div>
+
+    <!-- =========================================================
+         CAMERA MODAL
+    ========================================================== -->
+
+    <div
+        id="cameraModal"
+        class="modal hidden"
+    >
+
+        <div class="modal-card">
 
 
-<script src="chat.js"></script>
+            <div class="modal-header">
+
+                <h3>
+                    تصوير المسألة
+                </h3>
+
+
+                <button
+                    id="closeCameraButton"
+                    type="button"
+                    aria-label="إغلاق"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <video
+                id="cameraVideo"
+                autoplay
+                playsinline
+            ></video>
+
+
+            <canvas
+                id="cameraCanvas"
+                hidden
+            ></canvas>
+
+
+            <button
+                id="takePhotoButton"
+                class="capture-button"
+                type="button"
+            >
+                التقاط الصورة
+            </button>
+
+
+            <p
+                id="cameraError"
+                class="camera-error"
+            ></p>
+
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================================================
+         APP JS
+    ========================================================== -->
+
+    <script src="app.js"></script>
+
+
+    <!-- =========================================================
+         UI JS
+    ========================================================== -->
+
+    <script>
+
+        /* =========================================================
+           ELEMENTS
+        ========================================================= */
+
+        const body =
+            document.body;
+
+        const sidebar =
+            document.getElementById(
+                "sidebar"
+            );
+
+        const sidebarToggleButton =
+            document.getElementById(
+                "sidebarToggleButton"
+            );
+
+        const sidebarCloseButton =
+            document.getElementById(
+                "sidebarCloseButton"
+            );
+
+        const sidebarOverlay =
+            document.getElementById(
+                "sidebarOverlay"
+            );
+
+        const themeToggle =
+            document.getElementById(
+                "themeToggle"
+            );
+
+        const topAvatar =
+            document.getElementById(
+                "topUserAvatar"
+            );
+
+        const userName =
+            document.getElementById(
+                "userName"
+            );
+
+
+        /* =========================================================
+           THEME
+        ========================================================= */
+
+        function applyTheme(
+            theme
+        ) {
+
+            if (
+                theme ===
+                "dark"
+            ) {
+
+                body.classList.add(
+                    "dark"
+                );
+
+                themeToggle.textContent =
+                    "☀";
+
+                themeToggle.title =
+                    "التبديل للوضع النهاري";
+
+            } else {
+
+                body.classList.remove(
+                    "dark"
+                );
+
+                themeToggle.textContent =
+                    "☾";
+
+                themeToggle.title =
+                    "التبديل للوضع الليلي";
+
+            }
+
+
+            localStorage.setItem(
+                "physics_ai_theme",
+                theme
+            );
+
+        }
+
+
+        function loadTheme() {
+
+            const saved =
+                localStorage.getItem(
+                    "physics_ai_theme"
+                );
+
+
+            if (
+                saved ===
+                "dark"
+            ) {
+
+                applyTheme(
+                    "dark"
+                );
+
+                return;
+
+            }
+
+
+            if (
+                saved ===
+                "light"
+            ) {
+
+                applyTheme(
+                    "light"
+                );
+
+                return;
+
+            }
+
+
+            const systemDark =
+                window.matchMedia &&
+                window.matchMedia(
+                    "(prefers-color-scheme: dark)"
+                ).matches;
+
+
+            applyTheme(
+                systemDark
+                    ? "dark"
+                    : "light"
+            );
+
+        }
+
+
+        themeToggle.addEventListener(
+            "click",
+            function () {
+
+                const isDark =
+                    body.classList.contains(
+                        "dark"
+                    );
+
+
+                applyTheme(
+                    isDark
+                        ? "light"
+                        : "dark"
+                );
+
+            }
+        );
+
+
+        /* =========================================================
+           SIDEBAR
+        ========================================================= */
+
+        function toggleSidebar() {
+
+            if (
+                window.innerWidth <=
+                700
+            ) {
+
+                body.classList.toggle(
+                    "mobile-sidebar-open"
+                );
+
+                return;
+            }
+
+
+            body.classList.toggle(
+                "sidebar-collapsed"
+            );
+
+
+            localStorage.setItem(
+                "physics_ai_sidebar",
+                body.classList.contains(
+                    "sidebar-collapsed"
+                )
+                    ? "collapsed"
+                    : "open"
+            );
+
+        }
+
+
+        function closeSidebar() {
+
+            if (
+                window.innerWidth <=
+                700
+            ) {
+
+                body.classList.remove(
+                    "mobile-sidebar-open"
+                );
+
+                return;
+            }
+
+            body.classList.add(
+                "sidebar-collapsed"
+            );
+
+            localStorage.setItem(
+                "physics_ai_sidebar",
+                "collapsed"
+            );
+
+        }
+
+
+        sidebarToggleButton.addEventListener(
+            "click",
+            toggleSidebar
+        );
+
+
+        sidebarCloseButton.addEventListener(
+            "click",
+            closeSidebar
+        );
+
+
+        sidebarOverlay.addEventListener(
+            "click",
+            function () {
+
+                body.classList.remove(
+                    "mobile-sidebar-open"
+                );
+
+            }
+        );
+
+
+        function loadSidebarState() {
+
+            const saved =
+                localStorage.getItem(
+                    "physics_ai_sidebar"
+                );
+
+
+            if (
+                saved ===
+                "collapsed"
+            ) {
+
+                body.classList.add(
+                    "sidebar-collapsed"
+                );
+
+            }
+
+        }
+
+
+        /* =========================================================
+           CLOSE MOBILE SIDEBAR WHEN CLICK CONVERSATION
+        ========================================================= */
+
+        const conversationList =
+            document.getElementById(
+                "conversationList"
+            );
+
+
+        if (
+            conversationList
+        ) {
+
+            conversationList.addEventListener(
+                "click",
+                function () {
+
+                    if (
+                        window.innerWidth <=
+                        700
+                    ) {
+
+                        body.classList.remove(
+                            "mobile-sidebar-open"
+                        );
+
+                    }
+
+                }
+            );
+
+        }
+
+
+        /* =========================================================
+           USER AVATAR
+        ========================================================= */
+
+        function updateAvatar() {
+
+            if (
+                !userName ||
+                !topAvatar
+            ) {
+                return;
+            }
+
+
+            const name =
+                userName.textContent.trim();
+
+
+            if (
+                name &&
+                name !==
+                "جاري التحميل..."
+            ) {
+
+                topAvatar.textContent =
+                    name
+                        .charAt(0)
+                        .toUpperCase();
+
+            }
+
+        }
+
+
+        const userObserver =
+            new MutationObserver(
+                updateAvatar
+            );
+
+
+        if (
+            userName
+        ) {
+
+            userObserver.observe(
+                userName,
+                {
+                    childList:
+                        true,
+
+                    subtree:
+                        true,
+
+                    characterData:
+                        true
+                }
+            );
+
+        }
+
+
+        /* =========================================================
+           TEXTAREA
+        ========================================================= */
+
+        const messageInput =
+            document.getElementById(
+                "messageInput"
+            );
+
+
+        if (
+            messageInput
+        ) {
+
+            messageInput.addEventListener(
+                "input",
+                function () {
+
+                    this.style.height =
+                        "auto";
+
+                    this.style.height =
+                        Math.min(
+                            this.scrollHeight,
+                            180
+                        ) +
+                        "px";
+
+                }
+            );
+
+
+            messageInput.addEventListener(
+                "keydown",
+                function (event) {
+
+                    if (
+                        event.key ===
+                        "Enter" &&
+                        !event.shiftKey
+                    ) {
+
+                        event.preventDefault();
+
+
+                        const sendButton =
+                            document.getElementById(
+                                "sendButton"
+                            );
+
+
+                        if (
+                            sendButton &&
+                            !sendButton.disabled
+                        ) {
+
+                            sendButton.click();
+
+                        }
+
+                    }
+
+                }
+            );
+
+        }
+
+
+        /* =========================================================
+           QUICK PROMPTS
+        ========================================================= */
+
+        document
+            .querySelectorAll(
+                ".quick-prompt"
+            )
+            .forEach(
+                function (button) {
+
+                    button.addEventListener(
+                        "click",
+                        function () {
+
+                            const prompt =
+                                this.dataset.prompt;
+
+
+                            if (
+                                !messageInput
+                            ) {
+                                return;
+                            }
+
+
+                            messageInput.value =
+                                prompt;
+
+
+                            messageInput.dispatchEvent(
+                                new Event(
+                                    "input",
+                                    {
+                                        bubbles:
+                                            true
+                                    }
+                                )
+                            );
+
+
+                            messageInput.focus();
+
+                        }
+                    );
+
+                }
+            );
+
+
+        /* =========================================================
+           INIT
+        ========================================================= */
+
+        loadTheme();
+
+        loadSidebarState();
+
+        updateAvatar();
+
+    </script>
+
 
 </body>
 
