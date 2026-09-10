@@ -1,50 +1,76 @@
+"use strict";
+
 require("dotenv").config();
 
 const express = require("express");
 const path = require("path");
+const https = require("https");
+const crypto = require("crypto");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const Database = require("better-sqlite3");
 const multer = require("multer");
-const OpenAI = require("openai");
-const { toFile } = require("openai/uploads");
+
+
+/* =========================================================
+   APP
+========================================================= */
 
 const app = express();
 
-const PORT = process.env.PORT || 3000;
-app.set("trust proxy", 1);
+const PORT =
+    Number(process.env.PORT) ||
+    3000;
+
 
 /* =========================================================
-   DATABASE
+   ENVIRONMENT
 ========================================================= */
 
-const db = new Database(
-    path.join(__dirname, "physics-ai.db")
-);
+const GEMINI_API_KEY =
+    String(
+        process.env.GEMINI_API_KEY ||
+        ""
+    ).trim();
 
-db.pragma("journal_mode = WAL");
+const GEMINI_MODEL =
+    String(
+        process.env.GEMINI_MODEL ||
+        "gemini-3.5-flash-lite"
+    ).trim();
 
-db.pragma("foreign_keys = ON");
+const SESSION_SECRET =
+    String(
+        process.env.SESSION_SECRET ||
+        "physics-ai-session-secret-change-this"
+    );
 
-/* =========================================================
-   OPENAI
-========================================================= */
 
-if (!process.env.OPENAI_API_KEY) {
+if (!GEMINI_API_KEY) {
+
     console.error(
-        "ERROR: OPENAI_API_KEY غير موجود في ملف .env"
+        "\nERROR: GEMINI_API_KEY غير موجود في ملف .env\n"
     );
 
     process.exit(1);
 }
 
-const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
 
 /* =========================================================
-   DATABASE TABLES
+   DATABASE
 ========================================================= */
+
+const db =
+    new Database(
+        path.join(
+            __dirname,
+            "physics-ai.db"
+        )
+    );
+
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -81,15 +107,23 @@ db.exec(`
     );
 `);
 
+
 /* =========================================================
    MIDDLEWARE
 ========================================================= */
+
+app.set(
+    "trust proxy",
+    1
+);
+
 
 app.use(
     express.json({
         limit: "15mb"
     })
 );
+
 
 app.use(
     express.urlencoded({
@@ -98,11 +132,10 @@ app.use(
     })
 );
 
+
 app.use(
     session({
-        secret:
-            process.env.SESSION_SECRET ||
-            "physics-ai-session-secret-change-this",
+        secret: SESSION_SECRET,
 
         resave: false,
 
@@ -110,13 +143,12 @@ app.use(
 
         cookie: {
             httpOnly: true,
+
             sameSite: "lax",
 
-            /*
-             * localhost = false
-             * production HTTPS = true
-             */
-          secure: true,
+            secure:
+                process.env.NODE_ENV ===
+                "production",
 
             maxAge:
                 1000 *
@@ -128,106 +160,122 @@ app.use(
     })
 );
 
+
 app.use(
     express.static(
-        path.join(__dirname, "public")
+        path.join(
+            __dirname,
+            "public"
+        )
     )
 );
 
+
 /* =========================================================
-   MULTER
-   مهم:
-   الصور والصوت لهم Upload منفصل
+   MULTER - IMAGE
 ========================================================= */
 
-/*
- * IMAGE UPLOAD
- */
+const imageUpload =
+    multer({
+        storage:
+            multer.memoryStorage(),
 
-const imageUpload = multer({
-    storage: multer.memoryStorage(),
+        limits: {
+            fileSize:
+                10 *
+                1024 *
+                1024
+        },
 
-    limits: {
-        fileSize: 10 * 1024 * 1024
-    },
+        fileFilter:
+            function (
+                req,
+                file,
+                cb
+            ) {
 
-    fileFilter: function (req, file, cb) {
+                if (
+                    file.mimetype &&
+                    file.mimetype.startsWith(
+                        "image/"
+                    )
+                ) {
 
-        if (
-            file.mimetype &&
-            file.mimetype.startsWith("image/")
-        ) {
-            return cb(null, true);
-        }
+                    return cb(
+                        null,
+                        true
+                    );
 
-        cb(
-            new Error(
-                "يسمح برفع الصور فقط."
-            )
-        );
-    }
-});
+                }
 
+                cb(
+                    new Error(
+                        "يسمح برفع الصور فقط."
+                    )
+                );
 
-/*
- * AUDIO UPLOAD
- */
+            }
+    });
 
-const audioUpload = multer({
-    storage: multer.memoryStorage(),
-
-    limits: {
-        fileSize: 25 * 1024 * 1024
-    },
-
-    fileFilter: function (req, file, cb) {
-
-        const allowedAudioTypes = [
-            "audio/webm",
-            "audio/ogg",
-            "audio/wav",
-            "audio/x-wav",
-            "audio/mpeg",
-            "audio/mp3",
-            "audio/mp4",
-            "audio/m4a",
-            "audio/x-m4a"
-        ];
-
-        const mimeType =
-            String(
-                file.mimetype || ""
-            ).toLowerCase();
-
-        /*
-         * بعض المتصفحات ترسل نوعًا مثل:
-         * audio/webm;codecs=opus
-         *
-         * لذلك نأخذ الجزء الأساسي فقط.
-         */
-
-        const baseMimeType =
-            mimeType.split(";")[0];
-
-        if (
-            allowedAudioTypes.includes(
-                baseMimeType
-            ) ||
-            baseMimeType.startsWith("audio/")
-        ) {
-            return cb(null, true);
-        }
-
-        cb(
-            new Error(
-                "نوع الملف الصوتي غير مدعوم."
-            )
-        );
-    }
-});
 
 /* =========================================================
-   AUTH HELPERS
+   MULTER - AUDIO
+========================================================= */
+
+const audioUpload =
+    multer({
+        storage:
+            multer.memoryStorage(),
+
+        limits: {
+            fileSize:
+                25 *
+                1024 *
+                1024
+        },
+
+        fileFilter:
+            function (
+                req,
+                file,
+                cb
+            ) {
+
+                const mime =
+                    String(
+                        file.mimetype ||
+                        ""
+                    )
+                        .toLowerCase()
+                        .split(";")[0]
+                        .trim();
+
+
+                if (
+                    mime.startsWith(
+                        "audio/"
+                    )
+                ) {
+
+                    return cb(
+                        null,
+                        true
+                    );
+
+                }
+
+                cb(
+                    new Error(
+                        "نوع الملف الصوتي غير مدعوم."
+                    )
+                );
+
+            }
+    });
+
+
+/* =========================================================
+   AUTH
 ========================================================= */
 
 function requireLogin(
@@ -236,16 +284,1006 @@ function requireLogin(
     next
 ) {
 
-    if (!req.session.userId) {
+    if (
+        !req.session ||
+        !req.session.userId
+    ) {
 
-        return res.status(401).json({
-            error:
-                "لازم تسجل دخول الأول."
-        });
+        return res
+            .status(401)
+            .json({
+                error:
+                    "لازم تسجل دخول الأول."
+            });
+
     }
 
     next();
 }
+
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function cleanText(
+    value,
+    maxLength = 20000
+) {
+
+    return String(
+        value == null
+            ? ""
+            : value
+    )
+        .replace(/\u0000/g, "")
+        .trim()
+        .slice(
+            0,
+            maxLength
+        );
+
+}
+
+
+function normalizeEmail(
+    email
+) {
+
+    return String(
+        email || ""
+    )
+        .trim()
+        .toLowerCase()
+        .slice(
+            0,
+            160
+        );
+
+}
+
+
+function makeConversationTitle(
+    text
+) {
+
+    const cleaned =
+        cleanText(
+            text,
+            120
+        );
+
+    if (!cleaned) {
+        return "محادثة جديدة";
+    }
+
+    return (
+        cleaned.length > 55
+            ? cleaned.slice(
+                0,
+                55
+            ) + "..."
+            : cleaned
+    );
+
+}
+
+
+function buildHistory(
+    rawHistory
+) {
+
+    if (
+        !Array.isArray(
+            rawHistory
+        )
+    ) {
+        return [];
+    }
+
+    return rawHistory
+        .slice(-24)
+        .filter(
+            item =>
+                item &&
+                (
+                    item.role === "user" ||
+                    item.role === "assistant" ||
+                    item.role === "model"
+                ) &&
+                item.content
+        )
+        .map(
+            item => ({
+
+                role:
+                    item.role ===
+                    "assistant" ||
+                    item.role ===
+                    "model"
+                        ? "model"
+                        : "user",
+
+                content:
+                    cleanText(
+                        item.content,
+                        12000
+                    )
+
+            })
+        );
+
+}
+
+
+/* =========================================================
+   PHYSICS DOMAIN
+========================================================= */
+
+const PHYSICS_DOMAINS = [
+
+    "الميكانيكا",
+    "الديناميكا",
+    "الكينماتيكا",
+    "الاستاتيكا",
+    "الدوران",
+    "الجاذبية",
+    "الميكانيكا التحليلية",
+    "الموائع",
+    "الديناميكا الحرارية",
+    "النظرية الحركية",
+    "الكهرباء",
+    "المغناطيسية",
+    "الكهرومغناطيسية",
+    "الدوائر الكهربائية",
+    "التيار المتردد",
+    "الموجات",
+    "الصوت",
+    "البصريات",
+    "الاستقطاب",
+    "التداخل",
+    "الحيود",
+    "النسبية الخاصة",
+    "النسبية العامة",
+    "ميكانيكا الكم",
+    "الفيزياء الذرية",
+    "الفيزياء النووية",
+    "فيزياء الجسيمات",
+    "فيزياء المادة المكثفة",
+    "فيزياء البلازما",
+    "الفيزياء الفلكية",
+    "علم الكونيات",
+    "الفيزياء الرياضية",
+    "الفيزياء التجريبية",
+    "فيزياء المواد",
+    "الفيزياء الحيوية"
+];
+
+
+/* =========================================================
+   PHYSICS CLASSIFIER
+========================================================= */
+
+function guessPhysicsDomain(
+    text
+) {
+
+    const input =
+        String(text || "")
+            .toLowerCase();
+
+    const groups = [
+
+        {
+            name: "الميكانيكا",
+            words: [
+                "سرعة",
+                "عجلة",
+                "تسارع",
+                "قوة",
+                "نيوتن",
+                "احتكاك",
+                "طاقة",
+                "شغل",
+                "زخم",
+                "تصادم",
+                "عزم",
+                "دوران",
+                "حركة",
+                "جاذبية",
+                "مدار"
+            ]
+        },
+
+        {
+            name: "الكهرباء والمغناطيسية",
+            words: [
+                "تيار",
+                "جهد",
+                "مقاومة",
+                "كهرباء",
+                "شحنة",
+                "مجال كهربائي",
+                "مجال مغناطيسي",
+                "مغناطيس",
+                "مكثف",
+                "ملف",
+                "كيرشوف",
+                "أوم",
+                "فاراداي",
+                "لنز"
+            ]
+        },
+
+        {
+            name: "الحرارة والديناميكا الحرارية",
+            words: [
+                "حرارة",
+                "درجة الحرارة",
+                "غاز",
+                "ضغط",
+                "كارنو",
+                "انتروبي",
+                "طاقة داخلية",
+                "حرارية",
+                "ديناميكا حرارية"
+            ]
+        },
+
+        {
+            name: "الموجات والبصريات",
+            words: [
+                "موجة",
+                "تردد",
+                "طول موجي",
+                "صوت",
+                "مرآة",
+                "عدسة",
+                "انكسار",
+                "انعكاس",
+                "حيود",
+                "تداخل",
+                "دوبلر"
+            ]
+        },
+
+        {
+            name: "الفيزياء الحديثة",
+            words: [
+                "كم",
+                "كمومية",
+                "شرودنغر",
+                "بلانك",
+                "فوتون",
+                "إلكترون",
+                "ذرة",
+                "نووية",
+                "نواة",
+                "نشاط إشعاعي",
+                "نسبية",
+                "لورنتز",
+                "هيغز",
+                "كوارك"
+            ]
+        }
+
+    ];
+
+
+    let best =
+        "الفيزياء العامة";
+
+    let bestScore =
+        0;
+
+
+    for (
+        const group
+        of groups
+    ) {
+
+        let score = 0;
+
+
+        for (
+            const word
+            of group.words
+        ) {
+
+            if (
+                input.includes(
+                    word
+                )
+            ) {
+
+                score++;
+
+            }
+
+        }
+
+
+        if (
+            score >
+            bestScore
+        ) {
+
+            bestScore =
+                score;
+
+            best =
+                group.name;
+        }
+
+    }
+
+
+    return best;
+
+}
+
+
+/* =========================================================
+   PHYSICS SYSTEM PROMPT
+========================================================= */
+
+function buildPhysicsSystemPrompt(
+    context
+) {
+
+    return `
+
+أنت Physics AI، نظام ذكاء اصطناعي متخصص في الفيزياء وحل مسائلها.
+
+أنت مدرس فيزياء مصري محترف، ومهمتك ليست مجرد إعطاء إجابة،
+بل فهم السؤال ثم بناء الحل الفيزيائي الصحيح والتحقق منه قبل عرضه.
+
+============================================================
+نطاق المعرفة
+============================================================
+
+تعامل مع جميع فروع الفيزياء، وليس فقط منهجًا دراسيًا واحدًا.
+
+تشمل معرفتك:
+
+${PHYSICS_DOMAINS.join("، ")}
+
+وكذلك الموضوعات الفرعية والتخصصات المتقدمة داخل هذه الفروع.
+
+إذا كانت المسألة خارج المنهج الدراسي الحالي، لا ترفضها.
+حلها بالفيزياء المناسبة لمستواها.
+
+============================================================
+قاعدة العمل الأساسية
+============================================================
+
+في كل مسألة:
+
+1. افهم المطلوب الحقيقي.
+2. حدد المجال الفيزيائي.
+3. استخرج المعطيات.
+4. حدد المجهول.
+5. حدد الفرضيات الضرورية.
+6. اختر القانون أو النموذج المناسب.
+7. وحّد الوحدات.
+8. طبّق القانون.
+9. نفّذ الحساب بدقة.
+10. راجع الإشارات والاتجاهات.
+11. راجع الوحدات والأبعاد.
+12. افحص هل النتيجة منطقية فيزيائيًا.
+13. قدم الإجابة النهائية بوضوح.
+
+============================================================
+منع الاختلاق
+============================================================
+
+ممنوع اختراع:
+- رقم غير موجود.
+- قيمة غير معطاة بدون توضيح.
+- قانون غير صحيح.
+- معلومة فيزيائية وهمية.
+- قراءة غير واضحة من صورة.
+
+إذا كانت معلومة ناقصة فعلًا:
+قل للطالب ما الذي ينقصه.
+
+إذا كانت الصورة غير واضحة:
+حدد الجزء الذي لم تستطع قراءته.
+
+============================================================
+الحسابات
+============================================================
+
+انتبه إلى:
+
+- ترتيب العمليات.
+- الأقواس.
+- الأسس.
+- الجذور.
+- الكسور.
+- الإشارات.
+- التقريب.
+- الوحدات.
+
+لا تقرب مبكرًا إذا كان ذلك قد يسبب خطأ ملحوظًا.
+
+============================================================
+الوحدات
+============================================================
+
+استخدم SI افتراضيًا.
+
+انتبه إلى:
+m
+kg
+s
+N
+J
+W
+Pa
+C
+V
+A
+Ohm
+T
+Hz
+K
+
+وعند الحاجة حوّل الوحدات قبل التعويض.
+
+استخدم تحليل الأبعاد لمراجعة العلاقات عندما يكون مفيدًا.
+
+============================================================
+المتجهات
+============================================================
+
+عند وجود كميات متجهة:
+حدد الاتجاه.
+
+عند الحاجة استخدم المحاور:
+x
+y
+z
+
+وافصل المركبات.
+
+لا تعامل الكمية المتجهة ككمية قياسية إلا إذا كان ذلك صحيحًا.
+
+============================================================
+الميكانيكا
+============================================================
+
+فرّق بين:
+
+المسافة والإزاحة
+السرعة المتجهة والسرعة القياسية
+الكتلة والوزن
+القوة والطاقة
+الزخم والطاقة
+
+انتبه إلى:
+قوانين نيوتن
+الشغل والطاقة
+الزخم والدفع
+الحركة الدائرية
+العزم
+الاتزان
+الدوران
+الجاذبية
+المدارات
+
+============================================================
+الكهرباء
+============================================================
+
+فرّق بين:
+
+الشحنة
+التيار
+فرق الجهد
+المقاومة
+القدرة
+الطاقة
+
+وفي الدوائر:
+حدد هل العناصر على التوالي أم التوازي.
+
+استخدم قوانين كيرشوف عندما يلزم.
+
+============================================================
+المغناطيسية
+============================================================
+
+انتبه إلى:
+اتجاه المجال
+اتجاه القوة
+قاعدة اليد اليمنى
+شحنة الجسيم
+سرعة الجسيم
+قوانين الحث
+
+============================================================
+الحرارة
+============================================================
+
+فرّق بين:
+درجة الحرارة
+الحرارة
+الطاقة الداخلية
+الشغل
+
+ولا تخلط بين العمليات الحرارية المختلفة.
+
+============================================================
+الموجات
+============================================================
+
+عند الحاجة استخدم:
+
+v = f λ
+
+وفرّق بين:
+التردد
+الطول الموجي
+السرعة
+الزمن الدوري
+السعة
+
+============================================================
+البصريات
+============================================================
+
+حدد أولًا:
+نوع المرآة أو العدسة
+موضع الجسم
+نوع الصورة
+الإشارة
+البعد البؤري
+
+ثم طبّق القانون الصحيح.
+
+============================================================
+الفيزياء الحديثة
+============================================================
+
+عند التعامل مع:
+الكم
+النسبية
+الذرية
+النووية
+الجسيمات
+
+لا تستخدم تقريبًا كلاسيكيًا بلا سبب.
+
+ميّز بين النظريات والنماذج والتقريبات.
+
+============================================================
+النسبية
+============================================================
+
+انتبه للفرق بين:
+السرعة الكلاسيكية
+والعلاقات النسبية.
+
+في المسائل النسبية:
+انتبه إلى الزمن الخاص
+والطول الخاص
+والسرعة
+والطاقة
+والزخم
+وتحويلات لورنتز.
+
+============================================================
+الكم
+============================================================
+
+انتبه إلى:
+دالة الموجة
+الاحتمال
+مبدأ عدم اليقين
+المؤثرات
+مستويات الطاقة
+التراكب
+النفق الكمومي
+العزم الزاوي
+اللف المغزلي
+
+============================================================
+الصورة
+============================================================
+
+إذا أرسل الطالب صورة:
+
+اقرأ:
+- نص السؤال
+- الأرقام
+- الوحدات
+- الرموز
+- الرسم
+- الأسهم
+- المحاور
+- الزوايا
+
+إذا كانت الصورة لمسألة:
+حل المسألة اعتمادًا على جميع المعلومات المرئية.
+
+============================================================
+أسلوب اللغة
+============================================================
+
+تحدث بالعربية المصرية الطبيعية.
+
+خليك محترم وواضح.
+
+مسموح بتعبيرات طبيعية مثل:
+"بص"
+"خلينا نفكها"
+"الفكرة هنا"
+
+لكن لا تجعل العامية تقلل من الدقة العلمية.
+
+============================================================
+حسب طلب الطالب
+============================================================
+
+إذا قال:
+"حل"
+
+→ حل مباشرة بشكل واضح.
+
+إذا قال:
+"حل بالخطوات"
+
+→ استخدم:
+
+المعطيات
+المطلوب
+الفكرة الفيزيائية
+القانون
+التعويض
+الحساب
+الوحدة
+المراجعة
+الإجابة النهائية
+
+إذا قال:
+"هات الناتج"
+
+→ كن مباشرًا مع توضيح قصير عند الحاجة.
+
+إذا قال:
+"اشرح"
+
+→ اشرح من الأساسيات وحتى الفهم.
+
+إذا قال:
+"مش فاهم"
+
+→ غير أسلوب الشرح ولا تكرر نفس الكلام.
+
+إذا قال:
+"اختبرني"
+
+→ اطرح سؤالًا وانتظر الإجابة.
+
+إذا قال:
+"صححلي"
+
+→ افحص حله خطوة بخطوة وحدد مكان الخطأ.
+
+============================================================
+التعامل مع السياق
+============================================================
+
+تذكر المحادثة السابقة.
+
+إذا قال:
+"طيب احسبها"
+أو
+"طب السرعة؟"
+أو
+"ليه؟"
+
+استخدم السياق السابق طالما المقصود واضح.
+
+============================================================
+المراجعة النهائية
+============================================================
+
+قبل إرسال حل عددي اسأل نفسك داخليًا:
+
+هل القانون صحيح؟
+هل البيانات صحيحة؟
+هل الوحدات صحيحة؟
+هل التعويض صحيح؟
+هل الحساب صحيح؟
+هل الإشارة صحيحة؟
+هل النتيجة منطقية؟
+هل أجبت المطلوب؟
+
+إذا وجدت خطأ:
+صححه قبل إرسال الإجابة.
+
+============================================================
+سياق جلسة الطالب
+============================================================
+
+${context}
+
+============================================================
+قاعدة أخيرة
+============================================================
+
+أنت لا تريد فقط الوصول للناتج.
+
+أنت تريد أن تكون النتيجة:
+صحيحة
+ومفهومة
+ومبررة
+وقابلة للمراجعة.
+
+`;
+}
+
+
+/* =========================================================
+   GEMINI REST REQUEST
+========================================================= */
+
+function callGemini(
+    contents,
+    systemInstruction
+) {
+
+    return new Promise(
+        function (
+            resolve,
+            reject
+        ) {
+
+            const payload =
+                JSON.stringify({
+
+                    contents,
+
+                    systemInstruction: {
+                        parts: [
+                            {
+                                text:
+                                    systemInstruction
+                            }
+                        ]
+                    },
+
+                    generationConfig: {
+
+                        temperature:
+                            0.18,
+
+                        topP:
+                            0.85,
+
+                        topK:
+                            32,
+
+                        maxOutputTokens:
+                            5000
+                    }
+
+                });
+
+
+            const request =
+                https.request(
+                    {
+                        hostname:
+                            "generativelanguage.googleapis.com",
+
+                        path:
+                            "/v1beta/models/" +
+                            encodeURIComponent(
+                                GEMINI_MODEL
+                            ) +
+                            ":generateContent",
+
+                        method:
+                            "POST",
+
+                        family:
+                            4,
+
+                        timeout:
+                            60000,
+
+                        headers: {
+
+                            "Content-Type":
+                                "application/json",
+
+                            "Content-Length":
+                                Buffer
+                                    .byteLength(
+                                        payload
+                                    ),
+
+                            "x-goog-api-key":
+                                GEMINI_API_KEY
+                        }
+
+                    },
+
+                    function (response) {
+
+                        let raw =
+                            "";
+
+                        response.setEncoding(
+                            "utf8"
+                        );
+
+
+                        response.on(
+                            "data",
+                            function (chunk) {
+
+                                raw +=
+                                    chunk;
+
+                            }
+                        );
+
+
+                        response.on(
+                            "end",
+                            function () {
+
+                                let parsed;
+
+                                try {
+
+                                    parsed =
+                                        raw
+                                            ? JSON.parse(
+                                                raw
+                                            )
+                                            : {};
+
+                                } catch (
+                                    error
+                                ) {
+
+                                    return reject(
+                                        new Error(
+                                            "استجابة غير صالحة من Gemini."
+                                        )
+                                    );
+
+                                }
+
+
+                                const status =
+                                    Number(
+                                        response.statusCode ||
+                                        500
+                                    );
+
+
+                                if (
+                                    status < 200 ||
+                                    status >= 300
+                                ) {
+
+                                    const apiMessage =
+                                        parsed
+                                            ?.error
+                                            ?.message ||
+                                        "Gemini request failed.";
+
+
+                                    const error =
+                                        new Error(
+                                            apiMessage
+                                        );
+
+                                    error.status =
+                                        status;
+
+                                    return reject(
+                                        error
+                                    );
+
+                                }
+
+
+                                const candidates =
+                                    Array.isArray(
+                                        parsed.candidates
+                                    )
+                                        ? parsed.candidates
+                                        : [];
+
+
+                                const parts =
+                                    candidates[0]
+                                        ?.content
+                                        ?.parts || [];
+
+
+                                const text =
+                                    parts
+                                        .map(
+                                            part =>
+                                                String(
+                                                    part?.text ||
+                                                    ""
+                                                )
+                                        )
+                                        .join(
+                                            "\n"
+                                        )
+                                        .trim();
+
+
+                                if (!text) {
+
+                                    return reject(
+                                        new Error(
+                                            "Gemini returned an empty response."
+                                        )
+                                    );
+
+                                }
+
+
+                                resolve(
+                                    text
+                                );
+
+                            }
+                        );
+
+                    }
+                );
+
+
+            request.on(
+                "timeout",
+                function () {
+
+                    request.destroy(
+                        new Error(
+                            "انتهت مهلة الاتصال بـ Gemini."
+                        )
+                    );
+
+                }
+            );
+
+
+            request.on(
+                "error",
+                function (error) {
+
+                    reject(
+                        error
+                    );
+
+                }
+            );
+
+
+            request.write(
+                payload
+            );
+
+
+            request.end();
+
+        }
+    );
+
+}
+
 
 /* =========================================================
    HOME
@@ -253,7 +1291,10 @@ function requireLogin(
 
 app.get(
     "/",
-    function (req, res) {
+    function (
+        req,
+        res
+    ) {
 
         res.sendFile(
             path.join(
@@ -262,8 +1303,10 @@ app.get(
                 "index.html"
             )
         );
+
     }
 );
+
 
 /* =========================================================
    REGISTER
@@ -271,63 +1314,84 @@ app.get(
 
 app.post(
     "/api/auth/register",
-    async function (req, res) {
+    async function (
+        req,
+        res
+    ) {
 
         try {
 
             const name =
-                String(
-                    req.body.name || ""
-                )
-                    .trim()
-                    .slice(0, 80);
+                cleanText(
+                    req.body.name,
+                    80
+                );
+
 
             const email =
-                String(
-                    req.body.email || ""
-                )
-                    .trim()
-                    .toLowerCase()
-                    .slice(0, 160);
+                normalizeEmail(
+                    req.body.email
+                );
+
 
             const password =
                 String(
-                    req.body.password || ""
+                    req.body.password ||
+                    ""
                 );
+
 
             if (!name) {
 
-                return res.status(400).json({
-                    error:
-                        "اكتب اسمك."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب اسمك."
+                    });
+
             }
+
 
             if (!email) {
 
-                return res.status(400).json({
-                    error:
-                        "اكتب البريد الإلكتروني."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب البريد الإلكتروني."
+                    });
+
             }
 
-            if (!email.includes("@")) {
 
-                return res.status(400).json({
-                    error:
-                        "اكتب بريد إلكتروني صحيح."
-                });
+            if (
+                !email.includes("@")
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب بريد إلكتروني صحيح."
+                    });
+
             }
+
 
             if (
                 password.length < 6
             ) {
 
-                return res.status(400).json({
-                    error:
-                        "كلمة السر لازم تكون 6 أحرف على الأقل."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "كلمة السر لازم تكون 6 أحرف على الأقل."
+                    });
+
             }
+
 
             const existingUser =
                 db.prepare(`
@@ -335,15 +1399,22 @@ app.post(
                     FROM users
                     WHERE email = ?
                 `)
-                .get(email);
+                    .get(
+                        email
+                    );
+
 
             if (existingUser) {
 
-                return res.status(409).json({
-                    error:
-                        "البريد الإلكتروني مستخدم بالفعل."
-                });
+                return res
+                    .status(409)
+                    .json({
+                        error:
+                            "البريد الإلكتروني مستخدم بالفعل."
+                    });
+
             }
+
 
             const hashedPassword =
                 await bcrypt.hash(
@@ -351,17 +1422,23 @@ app.post(
                     12
                 );
 
+
             const result =
                 db.prepare(`
                     INSERT INTO users
-                    (name, email, password)
+                    (
+                        name,
+                        email,
+                        password
+                    )
                     VALUES (?, ?, ?)
                 `)
-                .run(
-                    name,
-                    email,
-                    hashedPassword
-                );
+                    .run(
+                        name,
+                        email,
+                        hashedPassword
+                    );
+
 
             req.session.userId =
                 result.lastInsertRowid;
@@ -369,11 +1446,14 @@ app.post(
             req.session.userName =
                 name;
 
+
             res.json({
 
-                success: true,
+                success:
+                    true,
 
                 user: {
+
                     id:
                         result.lastInsertRowid,
 
@@ -384,20 +1464,28 @@ app.post(
 
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 "REGISTER ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "حصل خطأ أثناء إنشاء الحساب."
-            });
+
+            res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء إنشاء الحساب."
+                });
+
         }
+
     }
 );
+
 
 /* =========================================================
    LOGIN
@@ -405,32 +1493,40 @@ app.post(
 
 app.post(
     "/api/auth/login",
-    async function (req, res) {
+    async function (
+        req,
+        res
+    ) {
 
         try {
 
             const email =
-                String(
-                    req.body.email || ""
-                )
-                    .trim()
-                    .toLowerCase();
+                normalizeEmail(
+                    req.body.email
+                );
+
 
             const password =
                 String(
-                    req.body.password || ""
+                    req.body.password ||
+                    ""
                 );
+
 
             if (
                 !email ||
                 !password
             ) {
 
-                return res.status(400).json({
-                    error:
-                        "اكتب البريد الإلكتروني وكلمة السر."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب البريد الإلكتروني وكلمة السر."
+                    });
+
             }
+
 
             const user =
                 db.prepare(`
@@ -438,15 +1534,22 @@ app.post(
                     FROM users
                     WHERE email = ?
                 `)
-                .get(email);
+                    .get(
+                        email
+                    );
+
 
             if (!user) {
 
-                return res.status(401).json({
-                    error:
-                        "البريد الإلكتروني أو كلمة السر غير صحيحة."
-                });
+                return res
+                    .status(401)
+                    .json({
+                        error:
+                            "البريد الإلكتروني أو كلمة السر غير صحيحة."
+                    });
+
             }
+
 
             const validPassword =
                 await bcrypt.compare(
@@ -454,13 +1557,18 @@ app.post(
                     user.password
                 );
 
+
             if (!validPassword) {
 
-                return res.status(401).json({
-                    error:
-                        "البريد الإلكتروني أو كلمة السر غير صحيحة."
-                });
+                return res
+                    .status(401)
+                    .json({
+                        error:
+                            "البريد الإلكتروني أو كلمة السر غير صحيحة."
+                    });
+
             }
+
 
             req.session.userId =
                 user.id;
@@ -468,32 +1576,48 @@ app.post(
             req.session.userName =
                 user.name;
 
+
             res.json({
 
-                success: true,
+                success:
+                    true,
 
                 user: {
-                    id: user.id,
-                    name: user.name,
-                    email: user.email
+
+                    id:
+                        user.id,
+
+                    name:
+                        user.name,
+
+                    email:
+                        user.email
                 }
 
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 "LOGIN ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "حصل خطأ أثناء تسجيل الدخول."
-            });
+
+            res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تسجيل الدخول."
+                });
+
         }
+
     }
 );
+
 
 /* =========================================================
    LOGOUT
@@ -501,30 +1625,46 @@ app.post(
 
 app.post(
     "/api/auth/logout",
-    function (req, res) {
+    function (
+        req,
+        res
+    ) {
 
         req.session.destroy(
-            function (error) {
+            function (
+                error
+            ) {
 
                 if (error) {
 
-                    return res.status(500).json({
-                        error:
-                            "تعذر تسجيل الخروج."
-                    });
+                    return res
+                        .status(500)
+                        .json({
+                            error:
+                                "تعذر تسجيل الخروج."
+                        });
+
                 }
+
 
                 res.clearCookie(
                     "connect.sid"
                 );
 
+
                 res.json({
-                    success: true
+
+                    success:
+                        true
+
                 });
+
             }
         );
+
     }
 );
+
 
 /* =========================================================
    CURRENT USER
@@ -532,14 +1672,25 @@ app.post(
 
 app.get(
     "/api/auth/me",
-    function (req, res) {
+    function (
+        req,
+        res
+    ) {
 
-        if (!req.session.userId) {
+        if (
+            !req.session ||
+            !req.session.userId
+        ) {
 
             return res.json({
-                loggedIn: false
+
+                loggedIn:
+                    false
+
             });
+
         }
+
 
         const user =
             db.prepare(`
@@ -550,30 +1701,41 @@ app.get(
                 FROM users
                 WHERE id = ?
             `)
-            .get(
-                req.session.userId
-            );
+                .get(
+                    req.session.userId
+                );
+
 
         if (!user) {
 
-            req.session.destroy(
-                () => {}
+            return req.session.destroy(
+                function () {
+
+                    res.json({
+
+                        loggedIn:
+                            false
+
+                    });
+
+                }
             );
 
-            return res.json({
-                loggedIn: false
-            });
         }
+
 
         res.json({
 
-            loggedIn: true,
+            loggedIn:
+                true,
 
             user
 
         });
+
     }
 );
+
 
 /* =========================================================
    CREATE CONVERSATION
@@ -582,60 +1744,75 @@ app.get(
 app.post(
     "/api/conversations",
     requireLogin,
-    function (req, res) {
+    function (
+        req,
+        res
+    ) {
 
         try {
 
             const title =
-                String(
+                cleanText(
                     req.body.title ||
-                    "محادثة جديدة"
-                )
-                    .trim()
-                    .slice(0, 120);
+                    "محادثة جديدة",
+                    120
+                ) ||
+                "محادثة جديدة";
+
 
             const result =
                 db.prepare(`
                     INSERT INTO conversations
-                    (user_id, title)
+                    (
+                        user_id,
+                        title
+                    )
                     VALUES (?, ?)
                 `)
-                .run(
-                    req.session.userId,
-                    title ||
-                    "محادثة جديدة"
-                );
+                    .run(
+                        req.session.userId,
+                        title
+                    );
+
 
             res.json({
 
-                success: true,
+                success:
+                    true,
 
                 conversation: {
 
                     id:
                         result.lastInsertRowid,
 
-                    title:
-                        title ||
-                        "محادثة جديدة"
+                    title
+
                 }
 
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 "CREATE CONVERSATION ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر إنشاء المحادثة."
-            });
+
+            res
+                .status(500)
+                .json({
+                    error:
+                        "تعذر إنشاء المحادثة."
+                });
+
         }
+
     }
 );
+
 
 /* =========================================================
    GET CONVERSATIONS
@@ -644,7 +1821,10 @@ app.post(
 app.get(
     "/api/conversations",
     requireLogin,
-    function (req, res) {
+    function (
+        req,
+        res
+    ) {
 
         try {
 
@@ -657,30 +1837,43 @@ app.get(
                         updated_at
                     FROM conversations
                     WHERE user_id = ?
-                    ORDER BY updated_at DESC
+                    ORDER BY
+                        updated_at DESC,
+                        id DESC
                 `)
-                .all(
-                    req.session.userId
-                );
+                    .all(
+                        req.session.userId
+                    );
+
 
             res.json({
+
                 conversations
+
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 "GET CONVERSATIONS ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر تحميل المحادثات."
-            });
+
+            res
+                .status(500)
+                .json({
+                    error:
+                        "تعذر تحميل المحادثات."
+                });
+
         }
+
     }
 );
+
 
 /* =========================================================
    GET ONE CONVERSATION
@@ -689,46 +1882,64 @@ app.get(
 app.get(
     "/api/conversations/:id",
     requireLogin,
-    function (req, res) {
+    function (
+        req,
+        res
+    ) {
 
         try {
 
-            const conversationId =
+            const id =
                 Number(
                     req.params.id
                 );
 
+
             if (
                 !Number.isInteger(
-                    conversationId
+                    id
                 )
             ) {
 
-                return res.status(400).json({
-                    error:
-                        "رقم المحادثة غير صحيح."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "رقم المحادثة غير صحيح."
+                    });
+
             }
+
 
             const conversation =
                 db.prepare(`
-                    SELECT *
+                    SELECT
+                        id,
+                        user_id,
+                        title,
+                        created_at,
+                        updated_at
                     FROM conversations
                     WHERE id = ?
                     AND user_id = ?
                 `)
-                .get(
-                    conversationId,
-                    req.session.userId
-                );
+                    .get(
+                        id,
+                        req.session.userId
+                    );
+
 
             if (!conversation) {
 
-                return res.status(404).json({
-                    error:
-                        "المحادثة غير موجودة."
-                });
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "المحادثة غير موجودة."
+                    });
+
             }
+
 
             const messages =
                 db.prepare(`
@@ -740,11 +1951,13 @@ app.get(
                         created_at
                     FROM messages
                     WHERE conversation_id = ?
-                    ORDER BY id ASC
+                    ORDER BY
+                        id ASC
                 `)
-                .all(
-                    conversationId
-                );
+                    .all(
+                        id
+                    );
+
 
             res.json({
 
@@ -754,20 +1967,28 @@ app.get(
 
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 "GET CONVERSATION ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر تحميل المحادثة."
-            });
+
+            res
+                .status(500)
+                .json({
+                    error:
+                        "تعذر تحميل المحادثة."
+                });
+
         }
+
     }
 );
+
 
 /* =========================================================
    DELETE CONVERSATION
@@ -776,14 +1997,34 @@ app.get(
 app.delete(
     "/api/conversations/:id",
     requireLogin,
-    function (req, res) {
+    function (
+        req,
+        res
+    ) {
 
         try {
 
-            const conversationId =
+            const id =
                 Number(
                     req.params.id
                 );
+
+
+            if (
+                !Number.isInteger(
+                    id
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "رقم المحادثة غير صحيح."
+                    });
+
+            }
+
 
             const result =
                 db.prepare(`
@@ -791,37 +2032,55 @@ app.delete(
                     WHERE id = ?
                     AND user_id = ?
                 `)
-                .run(
-                    conversationId,
-                    req.session.userId
-                );
+                    .run(
+                        id,
+                        req.session.userId
+                    );
 
-            if (!result.changes) {
 
-                return res.status(404).json({
-                    error:
-                        "المحادثة غير موجودة."
-                });
+            if (
+                !result.changes
+            ) {
+
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "المحادثة غير موجودة."
+                    });
+
             }
 
+
             res.json({
-                success: true
+
+                success:
+                    true
+
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 "DELETE CONVERSATION ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر حذف المحادثة."
-            });
+
+            res
+                .status(500)
+                .json({
+                    error:
+                        "تعذر حذف المحادثة."
+                });
+
         }
+
     }
 );
+
 
 /* =========================================================
    SAVE MESSAGE
@@ -830,7 +2089,10 @@ app.delete(
 app.post(
     "/api/conversations/:id/messages",
     requireLogin,
-    function (req, res) {
+    function (
+        req,
+        res
+    ) {
 
         try {
 
@@ -839,38 +2101,66 @@ app.post(
                     req.params.id
                 );
 
+
+            if (
+                !Number.isInteger(
+                    conversationId
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "رقم المحادثة غير صحيح."
+                    });
+
+            }
+
+
             const role =
-                req.body.role === "assistant"
+                req.body.role ===
+                "assistant"
                     ? "assistant"
                     : "user";
 
+
             const content =
-                String(
-                    req.body.content || ""
-                )
-                    .trim();
+                cleanText(
+                    req.body.content,
+                    20000
+                );
+
 
             let image =
-                req.body.image || null;
+                req.body.image ||
+                null;
 
-            /*
-             * منع تخزين صور ضخمة جدًا في قاعدة البيانات.
-             */
 
             if (
-                typeof image === "string" &&
-                image.length > 8_000_000
+                typeof image ===
+                "string" &&
+                image.length >
+                    8_000_000
             ) {
-                image = null;
+
+                image =
+                    null;
+
             }
+
 
             if (!content) {
 
-                return res.status(400).json({
-                    error:
-                        "الرسالة فارغة."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "الرسالة فارغة."
+                    });
+
             }
+
 
             const conversation =
                 db.prepare(`
@@ -879,44 +2169,59 @@ app.post(
                     WHERE id = ?
                     AND user_id = ?
                 `)
-                .get(
-                    conversationId,
-                    req.session.userId
-                );
+                    .get(
+                        conversationId,
+                        req.session.userId
+                    );
+
 
             if (!conversation) {
 
-                return res.status(404).json({
-                    error:
-                        "المحادثة غير موجودة."
-                });
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "المحادثة غير موجودة."
+                    });
+
             }
+
 
             const result =
                 db.prepare(`
                     INSERT INTO messages
-                    (conversation_id, role, content, image)
+                    (
+                        conversation_id,
+                        role,
+                        content,
+                        image
+                    )
                     VALUES (?, ?, ?, ?)
                 `)
-                .run(
-                    conversationId,
-                    role,
-                    content,
-                    image
-                );
+                    .run(
+                        conversationId,
+                        role,
+                        content,
+                        image
+                    );
+
 
             db.prepare(`
                 UPDATE conversations
-                SET updated_at = CURRENT_TIMESTAMP
+                SET
+                    updated_at =
+                        CURRENT_TIMESTAMP
                 WHERE id = ?
             `)
                 .run(
                     conversationId
                 );
 
+
             res.json({
 
-                success: true,
+                success:
+                    true,
 
                 message: {
 
@@ -928,108 +2233,185 @@ app.post(
                     content,
 
                     image
+
                 }
 
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 "SAVE MESSAGE ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر حفظ الرسالة."
-            });
+
+            res
+                .status(500)
+                .json({
+                    error:
+                        "تعذر حفظ الرسالة."
+                });
+
         }
+
     }
 );
 
+
 /* =========================================================
    TRANSCRIBE AUDIO
-   الإصلاح الأساسي هنا
 ========================================================= */
 
 app.post(
     "/api/transcribe",
-
-    audioUpload.single("audio"),
-
-    async function (req, res) {
+    audioUpload.single(
+        "audio"
+    ),
+    async function (
+        req,
+        res
+    ) {
 
         try {
 
             if (!req.file) {
 
-                return res.status(400).json({
-                    error:
-                        "لم يتم إرسال تسجيل صوتي."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "لم يتم إرسال تسجيل صوتي."
+                    });
+
             }
 
-            console.log(
-                "Audio received:",
-                req.file.originalname,
-                req.file.mimetype,
-                req.file.size
-            );
 
-            const audioFile =
-                await toFile(
-                    req.file.buffer,
+            if (
+                req.file.size >
+                19 *
+                1024 *
+                1024
+            ) {
 
-                    req.file.originalname ||
-                        "physics-ai-recording.webm",
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "التسجيل كبير جدًا. استخدم تسجيلًا أقل من 19MB."
+                    });
 
-                    {
-                        type:
-                            req.file.mimetype ||
-                            "audio/webm"
-                    }
+            }
+
+
+            const audioBase64 =
+                req.file.buffer.toString(
+                    "base64"
                 );
 
-            const transcription =
-                await client.audio.transcriptions.create({
 
-                    file: audioFile,
-
-                    model:
-                        "gpt-4o-mini-transcribe",
-
-                    language:
-                        "ar"
-                });
-
-            const text =
+            const mimeType =
                 String(
-                    transcription.text || ""
-                ).trim();
+                    req.file.mimetype ||
+                    "audio/webm"
+                )
+                    .split(";")[0]
+                    .trim();
+
+
+            const transcriptionPrompt = `
+استمع إلى التسجيل الصوتي.
+
+حوّل كلام الطالب إلى نص مكتوب فقط.
+
+القواعد:
+- اللغة الأساسية العربية المصرية.
+- حافظ على المصطلحات الفيزيائية والعلمية.
+- إذا نطق الطالب رموزًا أو أرقامًا، اكتبها بوضوح.
+- لا تشرح.
+- لا تحل السؤال.
+- لا تضف معلومات من عندك.
+- أخرج نص كلام الطالب فقط.
+`;
+
+
+            const answer =
+                await callGemini(
+
+                    [
+                        {
+                            role:
+                                "user",
+
+                            parts: [
+
+                                {
+                                    text:
+                                        transcriptionPrompt
+                                },
+
+                                {
+                                    inline_data: {
+
+                                        mime_type:
+                                            mimeType,
+
+                                        data:
+                                            audioBase64
+
+                                    }
+
+                                }
+
+                            ]
+
+                        }
+
+                    ],
+
+                    `
+أنت محول كلام إلى نص.
+مهمتك الوحيدة تفريغ التسجيل.
+لا تجب عن الأسئلة.
+لا تضف أي شرح.
+`
+                );
+
 
             res.json({
 
-                success: true,
+                success:
+                    true,
 
-                text
+                text:
+                    answer
+
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
                 "TRANSCRIPTION ERROR:",
                 error
             );
 
-            res.status(500).json({
 
-                error:
-                    "تعذر تحويل التسجيل الصوتي إلى نص."
+            res
+                .status(500)
+                .json({
+                    error:
+                        "تعذر تحويل التسجيل الصوتي إلى نص."
+                });
 
-            });
         }
+
     }
 );
+
 
 /* =========================================================
    PHYSICS AI
@@ -1037,67 +2419,90 @@ app.post(
 
 app.post(
     "/api/chat",
-
     requireLogin,
-
-    async function (req, res) {
+    async function (
+        req,
+        res
+    ) {
 
         try {
 
             const message =
-                String(
-                    req.body.message || ""
-                )
-                    .trim();
+                cleanText(
+                    req.body.message,
+                    16000
+                );
+
 
             if (!message) {
 
-                return res.status(400).json({
-                    error:
-                        "اكتب سؤالك الأول."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب سؤالك الأول."
+                    });
+
             }
 
+
             const history =
-                Array.isArray(
+                buildHistory(
                     req.body.history
-                )
-                    ? req.body.history.slice(-20)
-                    : [];
+                );
+
 
             const grade =
-                String(
-                    req.body.grade || ""
-                )
-                    .trim();
+                cleanText(
+                    req.body.grade,
+                    200
+                );
+
 
             const subject =
-                String(
+                cleanText(
                     req.body.subject ||
-                    "الفيزياء"
-                )
-                    .trim();
+                    "الفيزياء",
+                    200
+                );
+
 
             const unit =
-                String(
-                    req.body.unit || ""
-                )
-                    .trim();
+                cleanText(
+                    req.body.unit,
+                    300
+                );
+
 
             const lesson =
-                String(
-                    req.body.lesson || ""
-                )
-                    .trim();
+                cleanText(
+                    req.body.lesson,
+                    500
+                );
+
 
             const mode =
-                String(
-                    req.body.mode || ""
-                )
-                    .trim();
+                cleanText(
+                    req.body.mode,
+                    100
+                );
+
 
             const image =
-                req.body.image || null;
+                typeof req.body.image ===
+                    "string" &&
+                req.body.image.startsWith(
+                    "data:image/"
+                )
+                    ? req.body.image
+                    : null;
+
+
+            const physicsDomain =
+                guessPhysicsDomain(
+                    message
+                );
+
 
             const contextText = `
 
@@ -1109,8 +2514,8 @@ ${grade || "غير محدد"}
 المادة:
 ${subject}
 
-الفصل أو الوحدة:
-${unit || "غير محدد"}
+الوحدة:
+${unit || "غير محددة"}
 
 الدرس:
 ${lesson || "غير محدد"}
@@ -1118,358 +2523,251 @@ ${lesson || "غير محدد"}
 نوع الجلسة:
 ${mode || "دردشة عامة"}
 
-`;
-
-            const systemInstructions = `
-
-أنت Physics AI، مدرس فيزياء مصري متخصص في تعليم الطلاب.
-
-هدفك الأساسي إن الطالب يفهم الفيزياء فعلًا، وتكون إجابتك دقيقة علميًا وسهلة.
-
-==============================
-أسلوب اللغة
-==============================
-
-اتكلم بالمصري الطبيعي.
-
-استخدم لغة مصرية سهلة ومحترمة.
-
-ممكن تستخدم تعبيرات طبيعية مثل:
-
-"بص، الموضوع ببساطة..."
-
-"خلينا نفهمها."
-
-"الفكرة هنا إن..."
-
-"يعني إيه الكلام ده؟"
-
-لكن حافظ دائمًا على الدقة العلمية.
-
-القوانين والرموز والوحدات لازم تكون صحيحة.
-
-ممنوع عامية مبالغ فيها تقلل من جودة الشرح.
-
-==============================
-تحديد نوع الإجابة
-==============================
-
-حدد من كلام الطالب هو عايز إيه.
-
-إذا قال:
-
-"حل"
-
-"احسب"
-
-"هات الناتج"
-
-"عاوز الإجابة"
-
-فأعطه الحل أو النتيجة المطلوبة بشكل مباشر ومختصر.
-
-لا تقدم شرحًا طويلًا أو خطوات تفصيلية إلا لو الطالب طلبها.
-
-إذا قال:
-
-"حل بالخطوات"
-
-"اشرح الحل"
-
-"وريني جبتها إزاي"
-
-"عاوز أفهم"
-
-فهنا قدم الحل بالخطوات:
-
-1. المعطيات
-2. المطلوب
-3. القانون
-4. التعويض
-5. الحساب
-6. الوحدة
-7. النتيجة النهائية
-
-==============================
-شرح الدرس
-==============================
-
-إذا قال:
-
-"اشرح الدرس"
-
-"فهمني الدرس"
-
-"شرح"
-
-"عاوز أذاكر"
-
-فاشرح من البداية.
-
-ابدأ بالفكرة الأساسية.
-
-بعدها:
-
-- التعريفات
-- المفاهيم
-- القوانين
-- معنى الرموز
-- الوحدات
-- مثال بسيط
-- مثال تطبيقي
-- الأخطاء الشائعة
-
-لا تنسخ نص كتاب.
-
-اكتب شرحًا أصليًا.
-
-==============================
-مش فاهم
-==============================
-
-إذا قال الطالب:
-
-"مش فاهم"
-
-"مش فاهم خالص"
-
-"وضح"
-
-"اشرح تاني"
-
-لا تكرر نفس الشرح بنفس الأسلوب.
-
-غير طريقة الشرح.
-
-استخدم تشبيهًا أو مثالًا بسيطًا عندما يكون مناسبًا.
-
-وقسم الموضوع لأجزاء أصغر.
-
-==============================
-المسائل
-==============================
-
-لا تخترع أي رقم غير موجود.
-
-إذا كانت هناك قيمة ناقصة، أخبر الطالب بما ينقصه.
-
-انتبه جدًا إلى:
-
-- الوحدات
-- تحويل الوحدات
-- الإشارات
-- الاتجاهات
-- الرموز
-- القوانين
-
-إذا كانت هناك أكثر من طريقة للحل، استخدم الأبسط.
-
-==============================
-الصور
-==============================
-
-إذا أرسل الطالب صورة لمسألة:
-
-اقرأ الصورة بدقة.
-
-حدد المطلوب.
-
-إذا كانت الصورة غير واضحة، قل للطالب إن الجزء غير واضح بدل اختراع محتواه.
-
-إذا قال "حل":
-
-أعطه الحل المباشر.
-
-إذا قال "اشرح":
-
-اشرح بالتفصيل.
-
-==============================
-السياق
-==============================
-
-تذكر المحادثة السابقة.
-
-إذا قال:
-
-"احسبها"
-
-فارجع للمسألة السابقة.
-
-إذا قال:
-
-"طيب السرعة؟"
-
-افهم أنه يقصد السرعة المتعلقة بالسؤال السابق.
-
-لا تطلب إعادة السؤال طالما السياق واضح.
-
-==============================
-الدقة
-==============================
-
-لا تخترع قوانين.
-
-لا تخترع معلومات.
-
-إذا كانت البيانات غير كافية، وضح ذلك.
-
-==============================
-خارج الفيزياء
-==============================
-
-إذا كان السؤال بعيدًا تمامًا عن الفيزياء، قل باختصار إن تخصصك الأساسي هو الفيزياء.
-
-==============================
-هوية المشروع
-==============================
-
-أنت Physics AI، مدرس الفيزياء الذكي.
-
-تم تطويرك بواسطة محمد عبده فرج.
-
-لا تكشف أي بيانات شخصية أخرى عن المطور.
+المجال الفيزيائي المتوقع:
+${physicsDomain}
 
 `;
 
-            const input = [];
 
-            /*
-             * إضافة تاريخ المحادثة
-             */
+            const systemPrompt =
+                buildPhysicsSystemPrompt(
+                    contextText
+                );
+
+
+            const contents = [];
+
+
+            /* =====================================================
+               HISTORY
+            ====================================================== */
 
             for (
-                const item of history
+                const item
+                of history
             ) {
 
                 if (
                     !item ||
-                    !item.role ||
                     !item.content
                 ) {
                     continue;
                 }
 
-                input.push({
+
+                contents.push({
 
                     role:
-                        item.role === "assistant"
-                            ? "assistant"
+                        item.role ===
+                        "model"
+                            ? "model"
                             : "user",
 
-                    content:
-                        String(
-                            item.content
-                        )
+                    parts: [
+
+                        {
+                            text:
+                                item.content
+                        }
+
+                    ]
 
                 });
+
             }
 
-            /*
-             * الرسالة الحالية
-             */
 
-            const currentContent = [];
+            /* =====================================================
+               CURRENT MESSAGE
+            ====================================================== */
 
-            currentContent.push({
+            const currentParts = [];
 
-                type:
-                    "input_text",
+
+            currentParts.push({
 
                 text:
-                    contextText +
-                    "\n\nرسالة الطالب:\n" +
-                    message
+                    `
+رسالة الطالب الحالية:
 
+${message}
+`
             });
 
-            /*
-             * الصورة إن وجدت
-             */
+
+            /* =====================================================
+               IMAGE
+            ====================================================== */
 
             if (
-                image &&
-                typeof image === "string" &&
-                image.startsWith(
-                    "data:image/"
-                )
+                image
             ) {
 
-                currentContent.push({
+                const match =
+                    image.match(
+                        /^data:([^;]+);base64,(.+)$/
+                    );
 
-                    type:
-                        "input_image",
 
-                    image_url:
-                        image
+                if (match) {
 
-                });
+                    currentParts.push({
+
+                        inline_data: {
+
+                            mime_type:
+                                match[1],
+
+                            data:
+                                match[2]
+
+                        }
+
+                    });
+
+                }
+
             }
 
-            input.push({
+
+            contents.push({
 
                 role:
                     "user",
 
-                content:
-                    currentContent
+                parts:
+                    currentParts
 
             });
 
+
             console.log(
-                "Sending request to Physics AI..."
+                `Physics request | domain=${physicsDomain} | model=${GEMINI_MODEL}`
             );
 
-            const response =
-                await client.responses.create({
 
-                    model:
-                        "gpt-5.6-luna",
-
-                    instructions:
-                        systemInstructions,
-
-                    input
-
-                });
+            /* =====================================================
+               GEMINI
+            ====================================================== */
 
             const answer =
-                String(
-                    response.output_text || ""
-                ).trim() ||
-                "مش قادر أطلع إجابة دلوقتي، حاول تاني.";
+                await callGemini(
+                    contents,
+                    systemPrompt
+                );
 
-            console.log(
-                "AI response received."
-            );
 
             res.json({
 
-                success: true,
+                success:
+                    true,
 
-                answer
+                answer:
+                    answer
 
             });
 
-        } catch (error) {
+        } catch (
+            error
+        ) {
 
             console.error(
-                "AI ERROR:",
+                "GEMINI AI ERROR:",
                 error
             );
 
-            res.status(500).json({
 
-                error:
-                    "حصل خطأ أثناء الاتصال بـ Physics AI."
+            const status =
+                Number(
+                    error?.status ||
+                    error?.statusCode ||
+                    500
+                );
 
-            });
+
+            if (
+                status ===
+                429
+            ) {
+
+                return res
+                    .status(429)
+                    .json({
+                        error:
+                            "تم الوصول إلى حد الاستخدام الحالي لـ Gemini. حاول بعد قليل."
+                    });
+
+            }
+
+
+            if (
+                status ===
+                    401 ||
+                status ===
+                    403
+            ) {
+
+                return res
+                    .status(500)
+                    .json({
+                        error:
+                            "مفتاح Gemini غير صحيح أو غير مصرح باستخدامه."
+                    });
+
+            }
+
+
+            if (
+                status ===
+                404
+            ) {
+
+                return res
+                    .status(500)
+                    .json({
+                        error:
+                            "نموذج Gemini المحدد غير متاح. راجع GEMINI_MODEL في ملف .env."
+                    });
+
+            }
+
+
+            if (
+                String(
+                    error?.message ||
+                    ""
+                )
+                    .toLowerCase()
+                    .includes(
+                        "timeout"
+                    )
+            ) {
+
+                return res
+                    .status(504)
+                    .json({
+                        error:
+                            "الاتصال بـ Gemini أخذ وقتًا أطول من المتوقع. حاول السؤال مرة أخرى."
+                    });
+
+            }
+
+
+            res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء الاتصال بـ Physics AI."
+                });
+
         }
+
     }
 );
 
+
 /* =========================================================
-   MULTER / SERVER ERROR HANDLER
+   SERVER ERROR HANDLER
 ========================================================= */
 
 app.use(
@@ -1485,9 +2783,6 @@ app.use(
             error
         );
 
-        /*
-         * Multer file size
-         */
 
         if (
             error &&
@@ -1495,53 +2790,35 @@ app.use(
                 "LIMIT_FILE_SIZE"
         ) {
 
-            return res.status(400).json({
+            return res
+                .status(400)
+                .json({
+                    error:
+                        "حجم الملف كبير جدًا."
+                });
 
-                error:
-                    "حجم الملف كبير جدًا."
-
-            });
         }
 
-        /*
-         * Image error
-         */
 
         if (
             error &&
-            error.message ===
-                "يسمح برفع الصور فقط."
+            (
+                error.message ===
+                    "يسمح برفع الصور فقط." ||
+                error.message ===
+                    "نوع الملف الصوتي غير مدعوم."
+            )
         ) {
 
-            return res.status(400).json({
+            return res
+                .status(400)
+                .json({
+                    error:
+                        error.message
+                });
 
-                error:
-                    error.message
-
-            });
         }
 
-        /*
-         * Audio error
-         */
-
-        if (
-            error &&
-            error.message ===
-                "نوع الملف الصوتي غير مدعوم."
-        ) {
-
-            return res.status(400).json({
-
-                error:
-                    error.message
-
-            });
-        }
-
-        /*
-         * General upload error
-         */
 
         if (
             error &&
@@ -1549,26 +2826,26 @@ app.use(
                 "MulterError"
         ) {
 
-            return res.status(400).json({
+            return res
+                .status(400)
+                .json({
+                    error:
+                        "حصل خطأ في رفع الملف."
+                });
 
-                error:
-                    "حصل خطأ أثناء رفع الملف."
-
-            });
         }
 
-        /*
-         * General error
-         */
 
-        res.status(500).json({
+        res
+            .status(500)
+            .json({
+                error:
+                    "حصل خطأ في السيرفر."
+            });
 
-            error:
-                "حصل خطأ في السيرفر."
-
-        });
     }
 );
+
 
 /* =========================================================
    START SERVER
@@ -1579,11 +2856,41 @@ app.listen(
     function () {
 
         console.log(
-            `Physics AI running at http://localhost:${PORT}`
+            ""
         );
 
         console.log(
-            "Audio upload: READY"
+            "========================================"
+        );
+
+        console.log(
+            "      Physics AI Server"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            `Server:
+http://localhost:${PORT}`
+        );
+
+        console.log(
+            `Model:
+${GEMINI_MODEL}`
+        );
+
+        console.log(
+            "Database: READY"
+        );
+
+        console.log(
+            "Authentication: READY"
+        );
+
+        console.log(
+            "Conversations: READY"
         );
 
         console.log(
@@ -1591,7 +2898,19 @@ app.listen(
         );
 
         console.log(
-            "Database: READY"
+            "Audio transcription: READY"
+        );
+
+        console.log(
+            "Physics AI: READY"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            ""
         );
 
     }
