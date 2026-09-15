@@ -3,24 +3,36 @@ require("dotenv").config();
 const express = require("express");
 const path = require("path");
 const cookieSession = require("cookie-session");
+const bcrypt = require("bcryptjs");
 const Database = require("better-sqlite3");
 const multer = require("multer");
-const fs = require("fs");
-const crypto = require("crypto");
 const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-const db = new Database(
-    path.join(__dirname, "physics-ai.db")
-);
-
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
-
 app.set("trust proxy", 1);
+
+/* =========================================================
+   GEMINI
+========================================================= */
+
+if (!process.env.GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY غير موجود.");
+    process.exit(1);
+}
+
+const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY
+});
+
+const GEMINI_MODEL =
+    process.env.GEMINI_MODEL || "gemini-3.6-flash";
+
+/* =========================================================
+   APP CONFIG
+========================================================= */
 
 app.use(
     express.json({
@@ -34,6 +46,10 @@ app.use(
         limit: "25mb"
     })
 );
+
+/* =========================================================
+   SESSION
+========================================================= */
 
 app.use(
     cookieSession({
@@ -62,82 +78,86 @@ app.use(
     })
 );
 
-const publicPath = path.join(
-    __dirname,
-    "public"
-);
+/* =========================================================
+   STATIC FILES
+========================================================= */
 
 app.use(
-    express.static(publicPath)
+    express.static(
+        path.join(__dirname, "public")
+    )
 );
 
-const uploadsDir = path.join(
-    __dirname,
-    "uploads"
+/* =========================================================
+   DATABASE
+========================================================= */
+
+const db = new Database(
+    path.join(__dirname, "physics-ai.db")
 );
 
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(
-        uploadsDir,
-        {
-            recursive: true
-        }
+db.pragma("journal_mode = WAL");
+
+db.pragma("foreign_keys = ON");
+
+/* =========================================================
+   DATABASE TABLES
+========================================================= */
+
+db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        name TEXT NOT NULL,
+
+        email TEXT NOT NULL UNIQUE,
+
+        password TEXT NOT NULL,
+
+        created_at TEXT NOT NULL
     );
-}
 
-const upload = multer({
-    dest: uploadsDir,
+    CREATE TABLE IF NOT EXISTS conversations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    limits: {
-        fileSize:
-            15 *
-            1024 *
-            1024
-    }
-});
+        user_id INTEGER NOT NULL,
 
-const GEMINI_API_KEY =
-    process.env.GEMINI_API_KEY;
+        title TEXT NOT NULL DEFAULT 'دردشة جديدة',
 
-const GEMINI_MODEL =
-    process.env.GEMINI_MODEL ||
-    "gemini-3.6-flash";
+        created_at TEXT NOT NULL,
 
-let ai = null;
+        updated_at TEXT NOT NULL,
 
-if (GEMINI_API_KEY) {
-    ai = new GoogleGenAI({
-        apiKey: GEMINI_API_KEY
-    });
-}
+        FOREIGN KEY (user_id)
+            REFERENCES users(id)
+            ON DELETE CASCADE
+    );
 
-function normalizeUserId(value) {
-    const id = Number(value);
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    if (!Number.isFinite(id)) {
-        return null;
-    }
+        conversation_id INTEGER NOT NULL,
 
-    return id;
-}
+        role TEXT NOT NULL,
 
-function requireLogin(req, res, next) {
-    const userId =
-        normalizeUserId(
-            req.session &&
-            req.session.userId
-        );
+        content TEXT NOT NULL,
 
-    if (!userId) {
-        return res.status(401).json({
-            error:
-                "يجب تسجيل الدخول أولًا."
-        });
-    }
+        image TEXT,
 
-    req.userId = userId;
+        created_at TEXT NOT NULL,
 
-    next();
+        FOREIGN KEY (conversation_id)
+            REFERENCES conversations(id)
+            ON DELETE CASCADE
+    );
+`);
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function nowISO() {
+    return new Date().toISOString();
 }
 
 function saveSession(req) {
@@ -150,151 +170,28 @@ function regenerateSession(req) {
     return Promise.resolve();
 }
 
-function getGeminiStatus(error) {
-    return Number(
-        error?.status ||
-        error?.statusCode ||
-        error?.response?.status ||
-        0
-    );
-}
-
-function getRetryAfterMs(error) {
-    const retryAfter =
-        error?.response?.headers?.get?.(
-            "retry-after"
-        ) ??
-        error?.headers?.get?.(
-            "retry-after"
-        ) ??
-        error?.response?.headers?.[
-            "retry-after"
-        ] ??
-        error?.headers?.[
-            "retry-after"
-        ];
-
-    const seconds = Number(
-        retryAfter
-    );
-
-    if (
-        Number.isFinite(seconds) &&
-        seconds > 0
-    ) {
-        return Math.min(
-            seconds * 1000,
-            15000
-        );
-    }
-
-    return 0;
-}
-
-function isRetryableGeminiError(error) {
-    const status =
-        getGeminiStatus(error);
-
-    return (
-        status === 429 ||
-        status === 503 ||
-        status === 502 ||
-        status === 504 ||
-        status === 408
-    );
-}
-
-async function generateGeminiWithRetry(
-    options,
-    label = "Gemini"
+function requireAuth(
+    req,
+    res,
+    next
 ) {
-    if (!ai) {
-        throw new Error(
-            "GEMINI_API_KEY is missing"
-        );
-    }
-
-    const maxRetries = 3;
-
-    const baseDelay = 1000;
-
-    let lastError;
-
-    for (
-        let attempt = 0;
-        attempt <= maxRetries;
-        attempt++
+    if (
+        !req.session ||
+        !req.session.userId
     ) {
-        try {
-            return await ai.models.generateContent(
-                options
-            );
-        } catch (error) {
-            lastError = error;
-
-            const status =
-                getGeminiStatus(error);
-
-            if (
-                !isRetryableGeminiError(
-                    error
-                ) ||
-                attempt === maxRetries
-            ) {
-                throw error;
-            }
-
-            const retryAfter =
-                getRetryAfterMs(error);
-
-            const exponential =
-                Math.min(
-                    baseDelay *
-                    (2 ** attempt),
-                    8000
-                );
-
-            const jitter =
-                Math.floor(
-                    Math.random() * 500
-                );
-
-            const delay =
-                Math.max(
-                    retryAfter,
-                    exponential + jitter
-                );
-
-            console.warn(
-                `${label}: retry ${
-                    attempt + 1
-                }/${maxRetries} after ${
-                    delay
-                }ms (status ${status})`
-            );
-
-            await new Promise(
-                resolve =>
-                    setTimeout(
-                        resolve,
-                        delay
-                    )
-            );
-        }
+        return res.status(401).json({
+            error:
+                "يجب تسجيل الدخول أولاً."
+        });
     }
 
-    throw lastError;
+    next();
 }
 
-function safeJsonParse(value) {
-    try {
-        return JSON.parse(value);
-    } catch {
-        return null;
-    }
-}
-
-function cleanText(value) {
+function cleanString(
+    value,
+    maxLength = 10000
+) {
     if (
         value === null ||
         value === undefined
@@ -303,106 +200,42 @@ function cleanText(value) {
     }
 
     return String(value)
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .trim();
+        .trim()
+        .slice(0, maxLength);
 }
 
 function normalizeEmail(email) {
-    return cleanText(email)
+    return cleanString(email, 320)
         .toLowerCase();
 }
 
-function hashPassword(password) {
-    return crypto
-        .createHash("sha256")
-        .update(String(password))
-        .digest("hex");
-}
-
-function makeTitle(text) {
-    const value =
-        cleanText(text);
-
-    if (!value) {
-        return "محادثة جديدة";
-    }
-
-    const firstLine =
-        value
-            .split("\n")[0]
-            .trim();
-
-    if (
-        firstLine.length <= 60
-    ) {
-        return firstLine;
-    }
-
-    return (
-        firstLine.slice(0, 57) +
-        "..."
-    );
-}
-
 /* =========================================================
-   DATABASE
-   ========================================================= */
+   MULTER
+========================================================= */
 
-db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
+const upload = multer({
+    storage: multer.memoryStorage(),
 
-    CREATE TABLE IF NOT EXISTS conversations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        title TEXT NOT NULL DEFAULT 'محادثة جديدة',
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-        FOREIGN KEY (user_id)
-        REFERENCES users(id)
-        ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversation_id INTEGER NOT NULL,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        image TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-
-        FOREIGN KEY (conversation_id)
-        REFERENCES conversations(id)
-        ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS
-    idx_conversations_user
-    ON conversations(user_id);
-
-    CREATE INDEX IF NOT EXISTS
-    idx_messages_conversation
-    ON messages(conversation_id);
-`);
+    limits: {
+        fileSize:
+            15 *
+            1024 *
+            1024
+    }
+});
 
 /* =========================================================
    AUTH
-   ========================================================= */
+========================================================= */
 
 app.post(
     "/api/auth/register",
     async (req, res) => {
         try {
             const name =
-                cleanText(
-                    req.body?.name
+                cleanString(
+                    req.body?.name,
+                    100
                 );
 
             const email =
@@ -412,30 +245,37 @@ app.post(
 
             const password =
                 String(
-                    req.body?.password || ""
+                    req.body?.password ||
+                        ""
                 );
 
-            if (
-                !name ||
-                !email ||
-                !password
-            ) {
+            if (!name) {
                 return res
                     .status(400)
                     .json({
                         error:
-                            "من فضلك املأ جميع البيانات."
+                            "اكتب اسمك."
+                    });
+            }
+
+            if (!email) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب البريد الإلكتروني."
                     });
             }
 
             if (
-                password.length < 6
+                password.length <
+                6
             ) {
                 return res
                     .status(400)
                     .json({
                         error:
-                            "كلمة المرور يجب أن تكون 6 أحرف على الأقل."
+                            "كلمة السر لازم تكون 6 أحرف على الأقل."
                     });
             }
 
@@ -455,29 +295,29 @@ app.post(
                     });
             }
 
-            const passwordHash =
-                hashPassword(
-                    password
+            const hashedPassword =
+                await bcrypt.hash(
+                    password,
+                    12
                 );
+
+            const createdAt =
+                nowISO();
 
             const result =
                 db.prepare(`
-                    INSERT INTO users
-                    (
+                    INSERT INTO users (
                         name,
                         email,
-                        password
+                        password,
+                        created_at
                     )
-                    VALUES (?, ?, ?)
+                    VALUES (?, ?, ?, ?)
                 `).run(
                     name,
                     email,
-                    passwordHash
-                );
-
-            const userId =
-                Number(
-                    result.lastInsertRowid
+                    hashedPassword,
+                    createdAt
                 );
 
             await regenerateSession(
@@ -485,7 +325,7 @@ app.post(
             );
 
             req.session.userId =
-                userId;
+                result.lastInsertRowid;
 
             req.session.userName =
                 name;
@@ -499,8 +339,11 @@ app.post(
                 success: true,
 
                 user: {
-                    id: userId,
+                    id:
+                        result.lastInsertRowid,
+
                     name,
+
                     email
                 }
             });
@@ -531,28 +374,22 @@ app.post(
 
             const password =
                 String(
-                    req.body?.password || ""
+                    req.body?.password ||
+                        ""
                 );
 
-            if (
-                !email ||
-                !password
-            ) {
+            if (!email || !password) {
                 return res
                     .status(400)
                     .json({
                         error:
-                            "اكتب البريد الإلكتروني وكلمة المرور."
+                            "اكتب البريد وكلمة السر."
                     });
             }
 
             const user =
                 db.prepare(`
-                    SELECT
-                        id,
-                        name,
-                        email,
-                        password
+                    SELECT *
                     FROM users
                     WHERE email = ?
                 `).get(email);
@@ -562,24 +399,22 @@ app.post(
                     .status(401)
                     .json({
                         error:
-                            "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+                            "البريد الإلكتروني أو كلمة السر غير صحيحة."
                     });
             }
 
-            const passwordHash =
-                hashPassword(
-                    password
+            const validPassword =
+                await bcrypt.compare(
+                    password,
+                    user.password
                 );
 
-            if (
-                passwordHash !==
-                user.password
-            ) {
+            if (!validPassword) {
                 return res
                     .status(401)
                     .json({
                         error:
-                            "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+                            "البريد الإلكتروني أو كلمة السر غير صحيحة."
                     });
             }
 
@@ -588,7 +423,7 @@ app.post(
             );
 
             req.session.userId =
-                Number(user.id);
+                user.id;
 
             req.session.userName =
                 user.name;
@@ -602,16 +437,11 @@ app.post(
                 success: true,
 
                 user: {
-                    id:
-                        Number(
-                            user.id
-                        ),
+                    id: user.id,
 
-                    name:
-                        user.name,
+                    name: user.name,
 
-                    email:
-                        user.email
+                    email: user.email
                 }
             });
         } catch (error) {
@@ -632,72 +462,46 @@ app.post(
 
 app.get(
     "/api/auth/me",
-    async (req, res) => {
-        try {
-            const userId =
-                normalizeUserId(
-                    req.session &&
-                    req.session.userId
-                );
-
-            if (!userId) {
-                return res.json({
-                    loggedIn: false
-                });
-            }
-
-            const user =
-                db.prepare(`
-                    SELECT
-                        id,
-                        name,
-                        email
-                    FROM users
-                    WHERE id = ?
-                `).get(userId);
-
-            if (!user) {
-                req.session = null;
-
-                return res.json({
-                    loggedIn: false
-                });
-            }
-
+    (req, res) => {
+        if (
+            !req.session ||
+            !req.session.userId
+        ) {
             return res.json({
-                loggedIn: true,
-
-                user: {
-                    id:
-                        Number(
-                            user.id
-                        ),
-
-                    name:
-                        user.name,
-
-                    email:
-                        user.email
-                }
+                authenticated: false
             });
-        } catch (error) {
-            console.error(
-                "AUTH ME ERROR:",
-                error
+        }
+
+        const user =
+            db.prepare(`
+                SELECT
+                    id,
+                    name,
+                    email,
+                    created_at
+                FROM users
+                WHERE id = ?
+            `).get(
+                req.session.userId
             );
 
-            return res
-                .status(500)
-                .json({
-                    loggedIn: false
-                });
+        if (!user) {
+            return res.json({
+                authenticated: false
+            });
         }
+
+        return res.json({
+            authenticated: true,
+
+            user
+        });
     }
 );
 
 app.post(
     "/api/auth/logout",
-    (req, res) => {
+    async (req, res) => {
         try {
             req.session = null;
 
@@ -705,10 +509,13 @@ app.post(
                 "physicsai.sid",
                 {
                     httpOnly: true,
+
                     sameSite: "lax",
+
                     secure:
                         process.env.NODE_ENV ===
                         "production",
+
                     path: "/"
                 }
             );
@@ -734,11 +541,11 @@ app.post(
 
 /* =========================================================
    CONVERSATIONS
-   ========================================================= */
+========================================================= */
 
 app.get(
     "/api/conversations",
-    requireLogin,
+    requireAuth,
     (req, res) => {
         try {
             const conversations =
@@ -752,7 +559,7 @@ app.get(
                     WHERE user_id = ?
                     ORDER BY updated_at DESC
                 `).all(
-                    req.userId
+                    req.session.userId
                 );
 
             return res.json({
@@ -776,25 +583,33 @@ app.get(
 
 app.post(
     "/api/conversations",
-    requireLogin,
+    requireAuth,
     (req, res) => {
         try {
             const title =
-                makeTitle(
-                    req.body?.title
-                );
+                cleanString(
+                    req.body?.title,
+                    200
+                ) ||
+                "دردشة جديدة";
+
+            const createdAt =
+                nowISO();
 
             const result =
                 db.prepare(`
-                    INSERT INTO conversations
-                    (
+                    INSERT INTO conversations (
                         user_id,
-                        title
+                        title,
+                        created_at,
+                        updated_at
                     )
-                    VALUES (?, ?)
+                    VALUES (?, ?, ?, ?)
                 `).run(
-                    req.userId,
-                    title
+                    req.session.userId,
+                    title,
+                    createdAt,
+                    createdAt
                 );
 
             const conversation =
@@ -806,16 +621,11 @@ app.post(
                         updated_at
                     FROM conversations
                     WHERE id = ?
-                    AND user_id = ?
                 `).get(
-                    Number(
-                        result.lastInsertRowid
-                    ),
-                    req.userId
+                    result.lastInsertRowid
                 );
 
             return res.json({
-                success: true,
                 conversation
             });
         } catch (error) {
@@ -836,13 +646,24 @@ app.post(
 
 app.get(
     "/api/conversations/:id",
-    requireLogin,
+    requireAuth,
     (req, res) => {
         try {
-            const id =
-                Number(
-                    req.params.id
-                );
+            const conversationId =
+                Number(req.params.id);
+
+            if (
+                !Number.isInteger(
+                    conversationId
+                )
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "رقم المحادثة غير صحيح."
+                    });
+            }
 
             const conversation =
                 db.prepare(`
@@ -855,8 +676,8 @@ app.get(
                     WHERE id = ?
                     AND user_id = ?
                 `).get(
-                    id,
-                    req.userId
+                    conversationId,
+                    req.session.userId
                 );
 
             if (!conversation) {
@@ -868,8 +689,25 @@ app.get(
                     });
             }
 
+            const messages =
+                db.prepare(`
+                    SELECT
+                        id,
+                        role,
+                        content,
+                        image,
+                        created_at
+                    FROM messages
+                    WHERE conversation_id = ?
+                    ORDER BY id ASC
+                `).all(
+                    conversationId
+                );
+
             return res.json({
-                conversation
+                conversation,
+
+                messages
             });
         } catch (error) {
             console.error(
@@ -889,13 +727,11 @@ app.get(
 
 app.get(
     "/api/conversations/:id/messages",
-    requireLogin,
+    requireAuth,
     (req, res) => {
         try {
             const conversationId =
-                Number(
-                    req.params.id
-                );
+                Number(req.params.id);
 
             const conversation =
                 db.prepare(`
@@ -905,7 +741,7 @@ app.get(
                     AND user_id = ?
                 `).get(
                     conversationId,
-                    req.userId
+                    req.session.userId
                 );
 
             if (!conversation) {
@@ -921,7 +757,6 @@ app.get(
                 db.prepare(`
                     SELECT
                         id,
-                        conversation_id,
                         role,
                         content,
                         image,
@@ -952,156 +787,27 @@ app.get(
     }
 );
 
-app.post(
-    "/api/conversations/:id/messages",
-    requireLogin,
-    (req, res) => {
-        try {
-            const conversationId =
-                Number(
-                    req.params.id
-                );
-
-            const role =
-                cleanText(
-                    req.body?.role
-                );
-
-            const content =
-                cleanText(
-                    req.body?.content
-                );
-
-            const image =
-                req.body?.image ||
-                null;
-
-            if (
-                !["user", "model", "assistant"]
-                    .includes(role)
-            ) {
-                return res
-                    .status(400)
-                    .json({
-                        error:
-                            "نوع الرسالة غير صحيح."
-                    });
-            }
-
-            if (!content) {
-                return res
-                    .status(400)
-                    .json({
-                        error:
-                            "محتوى الرسالة فارغ."
-                    });
-            }
-
-            const conversation =
-                db.prepare(`
-                    SELECT id
-                    FROM conversations
-                    WHERE id = ?
-                    AND user_id = ?
-                `).get(
-                    conversationId,
-                    req.userId
-                );
-
-            if (!conversation) {
-                return res
-                    .status(404)
-                    .json({
-                        error:
-                            "المحادثة غير موجودة."
-                    });
-            }
-
-            const result =
-                db.prepare(`
-                    INSERT INTO messages
-                    (
-                        conversation_id,
-                        role,
-                        content,
-                        image
-                    )
-                    VALUES (?, ?, ?, ?)
-                `).run(
-                    conversationId,
-                    role,
-                    content,
-                    image
-                );
-
-            db.prepare(`
-                UPDATE conversations
-                SET updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            `).run(
-                conversationId
-            );
-
-            const message =
-                db.prepare(`
-                    SELECT
-                        id,
-                        conversation_id,
-                        role,
-                        content,
-                        image,
-                        created_at
-                    FROM messages
-                    WHERE id = ?
-                `).get(
-                    Number(
-                        result.lastInsertRowid
-                    )
-                );
-
-            return res.json({
-                success: true,
-                message
-            });
-        } catch (error) {
-            console.error(
-                "SAVE MESSAGE ERROR:",
-                error
-            );
-
-            return res
-                .status(500)
-                .json({
-                    error:
-                        "حصل خطأ أثناء حفظ الرسالة."
-                });
-        }
-    }
-);
-/* =========================================================
-   DELETE CONVERSATION
-   ========================================================= */
-
 app.delete(
     "/api/conversations/:id",
-    requireLogin,
+    requireAuth,
     (req, res) => {
         try {
             const conversationId =
                 Number(req.params.id);
 
-            const conversation =
+            const result =
                 db.prepare(`
-                    SELECT id
-                    FROM conversations
+                    DELETE FROM conversations
                     WHERE id = ?
                     AND user_id = ?
-                `).get(
+                `).run(
                     conversationId,
-                    req.userId
+                    req.session.userId
                 );
 
-            if (!conversation) {
+            if (
+                result.changes === 0
+            ) {
                 return res
                     .status(404)
                     .json({
@@ -1109,15 +815,6 @@ app.delete(
                             "المحادثة غير موجودة."
                     });
             }
-
-            db.prepare(`
-                DELETE FROM conversations
-                WHERE id = ?
-                AND user_id = ?
-            `).run(
-                conversationId,
-                req.userId
-            );
 
             return res.json({
                 success: true
@@ -1138,1215 +835,174 @@ app.delete(
     }
 );
 
+/* =========================================================
+   PHYSICS CONSTANTS
+========================================================= */
+
+const PHYSICS_CONSTANTS = {
+    g: "9.81 m/s²",
+
+    c: "3 × 10^8 m/s",
+
+    h: "6.626 × 10^-34 J·s",
+
+    G: "6.674 × 10^-11 N·m²/kg²",
+
+    e:
+        "1.602 × 10^-19 C",
+
+    me:
+        "9.109 × 10^-31 kg",
+
+    mp:
+        "1.673 × 10^-27 kg",
+
+    R:
+        "8.314 J/(mol·K)",
+
+    k:
+        "1.381 × 10^-23 J/K",
+
+    epsilon0:
+        "8.854 × 10^-12 F/m",
+
+    mu0:
+        "1.257 × 10^-6 H/m",
+
+    NA:
+        "6.022 × 10^23 mol^-1"
+};
 
 /* =========================================================
-   UPDATE CONVERSATION TITLE
-   ========================================================= */
+   UNIT FACTORS
+========================================================= */
 
-app.patch(
-    "/api/conversations/:id",
-    requireLogin,
-    (req, res) => {
-        try {
-            const conversationId =
-                Number(req.params.id);
+const UNIT_FACTORS = {
+    length: {
+        m: 1,
+        cm: 0.01,
+        mm: 0.001,
+        km: 1000,
+        inch: 0.0254,
+        ft: 0.3048
+    },
 
-            const title =
-                makeTitle(
-                    req.body?.title
-                );
+    mass: {
+        kg: 1,
+        g: 0.001,
+        mg: 0.000001,
+        ton: 1000
+    },
 
-            const conversation =
-                db.prepare(`
-                    SELECT id
-                    FROM conversations
-                    WHERE id = ?
-                    AND user_id = ?
-                `).get(
-                    conversationId,
-                    req.userId
-                );
+    time: {
+        s: 1,
+        ms: 0.001,
+        min: 60,
+        h: 3600
+    },
 
-            if (!conversation) {
-                return res
-                    .status(404)
-                    .json({
-                        error:
-                            "المحادثة غير موجودة."
-                    });
-            }
+    speed: {
+        "m/s": 1,
+        "km/h":
+            1000 / 3600,
+        "cm/s": 0.01
+    },
 
-            db.prepare(`
-                UPDATE conversations
-                SET title = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                AND user_id = ?
-            `).run(
-                title,
-                conversationId,
-                req.userId
-            );
+    force: {
+        N: 1,
+        kN: 1000
+    },
 
-            const updated =
-                db.prepare(`
-                    SELECT
-                        id,
-                        title,
-                        created_at,
-                        updated_at
-                    FROM conversations
-                    WHERE id = ?
-                    AND user_id = ?
-                `).get(
-                    conversationId,
-                    req.userId
-                );
+    energy: {
+        J: 1,
+        kJ: 1000,
+        MJ: 1000000,
+        cal: 4.184,
+        kcal: 4184,
+        eV:
+            1.602176634e-19
+    },
 
-            return res.json({
-                success: true,
-                conversation: updated
-            });
-        } catch (error) {
-            console.error(
-                "UPDATE CONVERSATION ERROR:",
-                error
-            );
+    power: {
+        W: 1,
+        kW: 1000,
+        MW: 1000000
+    },
 
-            return res
-                .status(500)
-                .json({
-                    error:
-                        "حصل خطأ أثناء تعديل المحادثة."
-                });
-        }
+    pressure: {
+        Pa: 1,
+        kPa: 1000,
+        MPa: 1000000,
+        bar: 100000,
+        atm:
+            101325
+    },
+
+    charge: {
+        C: 1,
+        mC: 0.001,
+        uC: 0.000001,
+        nC: 0.000000001
+    },
+
+    voltage: {
+        V: 1,
+        mV: 0.001,
+        kV: 1000
+    },
+
+    current: {
+        A: 1,
+        mA: 0.001,
+        uA: 0.000001
+    },
+
+    frequency: {
+        Hz: 1,
+        kHz: 1000,
+        MHz: 1000000,
+        GHz: 1000000000
     }
-);
-
+};
 
 /* =========================================================
-   AI HELPERS
-   ========================================================= */
+   UNIT ALIASES
+========================================================= */
 
-const SIMPLE_STYLE = `
-أنت مدرس فيزياء مصري محترف.
-
-تحدث مع الطالب باللغة العربية المصرية الواضحة والطبيعية.
-
-التزم بالآتي:
-
-- لا تستخدم LaTeX.
-- لا تستخدم رموز رياضية معقدة.
-- لا تستخدم علامات غريبة.
-- اكتب القوى بالكلمات.
-مثال:
-v تربيع
-a تربيع
-r تربيع
-
-- اكتب الضرب بكلمة "في".
-مثال:
-3 في 4
-
-- اكتب القسمة بكلمة "على".
-مثال:
-10 على 2
-
-- اجعل الكلام سهل القراءة على الهاتف.
-
-- لا تستخدم تنسيقات رياضية معقدة.
-
-- لا تقفز إلى نتيجة غير مبررة.
-
-- افهم سؤال الطالب أولًا.
-
-- إذا طلب الطالب الحل فقط، أعطه النتيجة المطلوبة بدون شرح طويل.
-
-- إذا قال الطالب "اشرح"، اشرح بالتفصيل وبطريقة مدرس مصري.
-
-- إذا كان السؤال يحتاج خطوات للحل، اجعل الخطوات قصيرة وواضحة.
-
-- إذا لم تكن متأكدًا من معلومة، لا تخترع إجابة.
-
-- حافظ على الدقة العلمية.
-`;
-
-
-function detectQuestionIntent(text) {
-    const value =
-        cleanText(text)
-            .toLowerCase();
-
-    const wantsExplanation =
-        value.includes("اشرح") ||
-        value.includes("شرح") ||
-        value.includes("فهمني") ||
-        value.includes("وضح") ||
-        value.includes("وضّح") ||
-        value.includes("ليه") ||
-        value.includes("لماذا") ||
-        value.includes("ازاي") ||
-        value.includes("كيف");
-
-    const wantsSolutionOnly =
-        value.includes("حل فقط") ||
-        value.includes("الإجابة فقط") ||
-        value.includes("الاجابة فقط") ||
-        value.includes("من غير شرح") ||
-        value.includes("بدون شرح") ||
-        value.includes("الناتج فقط") ||
-        value.includes("عاوز الحل");
-
-    return {
-        wantsExplanation,
-        wantsSolutionOnly
-    };
-}
-
-
-function buildExpertInstructions(
-    question,
-    history = []
-) {
-    const intent =
-        detectQuestionIntent(
-            question
-        );
-
-    let instruction =
-        SIMPLE_STYLE;
-
-    instruction += `
-
-السؤال الحالي للطالب:
-${question}
-`;
-
-    if (
-        Array.isArray(history) &&
-        history.length
-    ) {
-        instruction += `
-
-سياق المحادثة السابقة:
-
-`;
-
-        for (
-            const item of history
-        ) {
-            if (!item) {
-                continue;
-            }
-
-            const role =
-                item.role === "user"
-                    ? "الطالب"
-                    : "ثانو";
-
-            const content =
-                cleanText(
-                    item.content
-                );
-
-            if (!content) {
-                continue;
-            }
-
-            instruction +=
-                `${role}: ${content}\n`;
-        }
-    }
-
-    if (
-        intent.wantsSolutionOnly
-    ) {
-        instruction += `
-
-الطالب طلب الحل أو الإجابة فقط.
-أعطه الإجابة المطلوبة مباشرة.
-لا تضف شرحًا طويلًا.
-`;
-    } else if (
-        intent.wantsExplanation
-    ) {
-        instruction += `
-
-الطالب طلب شرحًا.
-اشرح الفكرة ثم خطوات الحل بطريقة واضحة وبسيطة.
-`;
-    } else {
-        instruction += `
-
-أجب بشكل طبيعي ومباشر.
-لا تحول كل سؤال إلى شرح طويل إلا إذا كان ذلك ضروريًا للفهم.
-`;
-    }
-
-    return instruction;
-}
-
-
-function cleanPhysicsAnswer(
-    answer
-) {
-    let value =
-        cleanText(answer);
-
-    if (!value) {
-        return "";
-    }
-
-    value =
-        value.replace(
-            /\$\$[\s\S]*?\$\$/g,
-            ""
-        );
-
-    value =
-        value.replace(
-            /\$([^$]+)\$/g,
-            "$1"
-        );
-
-    value =
-        value.replace(
-            /\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g,
-            "$1 على $2"
-        );
-
-    value =
-        value.replace(
-            /\\times/g,
-            " في "
-        );
-
-    value =
-        value.replace(
-            /\\cdot/g,
-            " في "
-        );
-
-    value =
-        value.replace(
-            /\*/g,
-            " في "
-        );
-
-    value =
-        value.replace(
-            /\^2/g,
-            " تربيع"
-        );
-
-    value =
-        value.replace(
-            /\^3/g,
-            " تكعيب"
-        );
-
-    value =
-        value.replace(
-            /\^(\d+)/g,
-            " أس $1"
-        );
-
-    value =
-        value.replace(
-            /\\sqrt\s*\{([^{}]+)\}/g,
-            "الجذر التربيعي لـ $1"
-        );
-
-    value =
-        value.replace(
-            /\\[a-zA-Z]+/g,
-            ""
-        );
-
-    value =
-        value.replace(
-            /```[\s\S]*?```/g,
-            match =>
-                match
-                    .replace(
-                        /```/g,
-                        ""
-                    )
-        );
-
-    value =
-        value.replace(
-            /\n{3,}/g,
-            "\n\n"
-        );
-
-    return value.trim();
-}
-
-
-/* =========================================================
-   GEMINI CHAT
-   ========================================================= */
-
-async function callGemini(
-    question,
-    history = [],
-    image = null
-) {
-    if (!ai) {
-        throw new Error(
-            "GEMINI_API_KEY is missing"
-        );
-    }
-
-    const instructions =
-        buildExpertInstructions(
-            question,
-            history
-        );
-
-    const parts = [];
-
-    parts.push({
-        text: instructions
-    });
-
-    if (image) {
-        let imageData = image;
-
-        let mimeType =
-            "image/jpeg";
-
-        if (
-            typeof image === "string"
-        ) {
-            const match =
-                image.match(
-                    /^data:(.+?);base64,(.+)$/
-                );
-
-            if (match) {
-                mimeType =
-                    match[1];
-
-                imageData =
-                    match[2];
-            }
-        }
-
-        if (
-            typeof imageData ===
-            "string"
-        ) {
-            parts.push({
-                inlineData: {
-                    mimeType,
-                    data:
-                        imageData
-                }
-            });
-        }
-    }
-
-    const response =
-        await generateGeminiWithRetry(
-            {
-                model:
-                    GEMINI_MODEL,
-
-                contents: [
-                    {
-                        role: "user",
-                        parts
-                    }
-                ]
-            },
-            "Gemini chat"
-        );
-
-    let answer = "";
-
-    if (
-        response?.text
-    ) {
-        answer =
-            response.text;
-    } else if (
-        response?.candidates?.[0]
-            ?.content?.parts
-    ) {
-        answer =
-            response.candidates[0]
-                .content
-                .parts
-                .map(
-                    part =>
-                        part.text || ""
-                )
-                .join("\n");
-    }
-
-    answer =
-        cleanPhysicsAnswer(
-            answer
-        );
-
-    if (!answer) {
-        throw new Error(
-            "Gemini returned an empty response"
-        );
-    }
-
-    return answer;
-}
-
-
-/* =========================================================
-   CHAT API
-   ========================================================= */
-
-app.post(
-    "/api/chat",
-    requireLogin,
-    async (req, res) => {
-        try {
-            const question =
-                cleanText(
-                    req.body?.message
-                );
-
-            const image =
-                req.body?.image ||
-                null;
-
-            let conversationId =
-                Number(
-                    req.body?.conversationId
-                );
-
-            if (
-                !question &&
-                !image
-            ) {
-                return res
-                    .status(400)
-                    .json({
-                        error:
-                            "اكتب السؤال أولًا."
-                    });
-            }
-
-            if (
-                !Number.isFinite(
-                    conversationId
-                ) ||
-                conversationId <= 0
-            ) {
-                const title =
-                    makeTitle(
-                        question ||
-                        "محادثة جديدة"
-                    );
-
-                const result =
-                    db.prepare(`
-                        INSERT INTO conversations
-                        (
-                            user_id,
-                            title
-                        )
-                        VALUES (?, ?)
-                    `).run(
-                        req.userId,
-                        title
-                    );
-
-                conversationId =
-                    Number(
-                        result.lastInsertRowid
-                    );
-            }
-
-            const conversation =
-                db.prepare(`
-                    SELECT
-                        id,
-                        title
-                    FROM conversations
-                    WHERE id = ?
-                    AND user_id = ?
-                `).get(
-                    conversationId,
-                    req.userId
-                );
-
-            if (!conversation) {
-                return res
-                    .status(404)
-                    .json({
-                        error:
-                            "المحادثة غير موجودة."
-                    });
-            }
-
-            const previousMessages =
-                db.prepare(`
-                    SELECT
-                        role,
-                        content
-                    FROM messages
-                    WHERE conversation_id = ?
-                    ORDER BY id ASC
-                    LIMIT 30
-                `).all(
-                    conversationId
-                );
-
-            if (question || image) {
-                db.prepare(`
-                    INSERT INTO messages
-                    (
-                        conversation_id,
-                        role,
-                        content,
-                        image
-                    )
-                    VALUES (?, ?, ?, ?)
-                `).run(
-                    conversationId,
-                    "user",
-                    question ||
-                        "صورة مرفقة",
-                    image
-                );
-            }
-
-            const answer =
-                await callGemini(
-                    question ||
-                        "حلل الصورة المرفقة وأجب عن السؤال الموجود فيها.",
-                    previousMessages,
-                    image
-                );
-
-            db.prepare(`
-                INSERT INTO messages
-                (
-                    conversation_id,
-                    role,
-                    content,
-                    image
-                )
-                VALUES (?, ?, ?, ?)
-            `).run(
-                conversationId,
-                "model",
-                answer,
-                null
-            );
-
-            db.prepare(`
-                UPDATE conversations
-                SET updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            `).run(
-                conversationId
-            );
-
-            return res.json({
-                success: true,
-
-                conversationId,
-
-                answer
-            });
-        } catch (error) {
-            console.error(
-                "CHAT ERROR:",
-                error
-            );
-
-            const status =
-                getGeminiStatus(
-                    error
-                );
-
-            if (status === 429) {
-                return res
-                    .status(429)
-                    .json({
-                        error:
-                            "الخدمة مشغولة حاليًا. جرّب السؤال مرة تانية بعد قليل."
-                    });
-            }
-
-            if (
-                status === 503 ||
-                status === 502 ||
-                status === 504
-            ) {
-                return res
-                    .status(503)
-                    .json({
-                        error:
-                            "خدمة الذكاء الاصطناعي مش متاحة مؤقتًا. جرّب مرة تانية."
-                    });
-            }
-
-            if (
-                error?.message ===
-                "GEMINI_API_KEY is missing"
-            ) {
-                return res
-                    .status(500)
-                    .json({
-                        error:
-                            "مفتاح Gemini غير موجود على السيرفر."
-                    });
-            }
-
-            return res
-                .status(500)
-                .json({
-                    error:
-                        "حصل خطأ أثناء معالجة السؤال."
-                });
-        }
-    }
-);
-
-
-/* =========================================================
-   TRANSCRIPTION
-   ========================================================= */
-
-app.post(
-    "/api/transcribe",
-    requireLogin,
-    upload.single("audio"),
-    async (req, res) => {
-        let uploadedFile =
-            req.file?.path;
-
-        try {
-            if (!req.file) {
-                return res
-                    .status(400)
-                    .json({
-                        error:
-                            "لم يتم إرسال ملف صوتي."
-                    });
-            }
-
-            if (!ai) {
-                throw new Error(
-                    "GEMINI_API_KEY is missing"
-                );
-            }
-
-            const audioBuffer =
-                fs.readFileSync(
-                    req.file.path
-                );
-
-            const base64Audio =
-                audioBuffer.toString(
-                    "base64"
-                );
-
-            const mimeType =
-                req.file.mimetype ||
-                "audio/webm";
-
-            const response =
-                await generateGeminiWithRetry(
-                    {
-                        model:
-                            GEMINI_MODEL,
-
-                        contents: [
-                            {
-                                role:
-                                    "user",
-
-                                parts: [
-                                    {
-                                        text:
-                                            "حوّل التسجيل الصوتي التالي إلى نص عربي واضح فقط. لا تضف شرحًا أو تعليقًا."
-                                    },
-
-                                    {
-                                        inlineData: {
-                                            mimeType,
-                                            data:
-                                                base64Audio
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    "Gemini transcription"
-                );
-
-            let text = "";
-
-            if (
-                response?.text
-            ) {
-                text =
-                    response.text;
-            } else if (
-                response
-                    ?.candidates?.[0]
-                    ?.content?.parts
-            ) {
-                text =
-                    response
-                        .candidates[0]
-                        .content
-                        .parts
-                        .map(
-                            part =>
-                                part.text ||
-                                ""
-                        )
-                        .join("\n");
-            }
-
-            text =
-                cleanText(
-                    text
-                );
-
-            return res.json({
-                success: true,
-                text
-            });
-        } catch (error) {
-            console.error(
-                "TRANSCRIBE ERROR:",
-                error
-            );
-
-            const status =
-                getGeminiStatus(
-                    error
-                );
-
-            if (status === 429) {
-                return res
-                    .status(429)
-                    .json({
-                        error:
-                            "الخدمة مشغولة حاليًا. جرّب التسجيل مرة أخرى بعد قليل."
-                    });
-            }
-
-            if (
-                error?.message ===
-                "GEMINI_API_KEY is missing"
-            ) {
-                return res
-                    .status(500)
-                    .json({
-                        error:
-                            "مفتاح Gemini غير موجود على السيرفر."
-                    });
-            }
-
-            return res
-                .status(500)
-                .json({
-                    error:
-                        "حصل خطأ أثناء تحويل التسجيل إلى نص."
-                });
-        } finally {
-            if (
-                uploadedFile &&
-                fs.existsSync(
-                    uploadedFile
-                )
-            ) {
-                try {
-                    fs.unlinkSync(
-                        uploadedFile
-                    );
-                } catch (
-                    cleanupError
-                ) {
-                    console.warn(
-                        "AUDIO CLEANUP ERROR:",
-                        cleanupError
-                    );
-                }
-            }
-        }
-    }
-);
-/* =========================================================
-   CORRECTIONS
-   ========================================================= */
-
-app.post(
-    "/api/corrections",
-    requireLogin,
-    (req, res) => {
-        try {
-            const question =
-                cleanText(
-                    req.body?.question
-                );
-
-            const answer =
-                cleanText(
-                    req.body?.answer
-                );
-
-            const correction =
-                cleanText(
-                    req.body?.correction
-                );
-
-            if (
-                !question ||
-                !correction
-            ) {
-                return res
-                    .status(400)
-                    .json({
-                        error:
-                            "بيانات التصحيح غير مكتملة."
-                    });
-            }
-
-            const correctionsDir =
-                path.join(
-                    __dirname,
-                    "knowledge"
-                );
-
-            if (
-                !fs.existsSync(
-                    correctionsDir
-                )
-            ) {
-                fs.mkdirSync(
-                    correctionsDir,
-                    {
-                        recursive: true
-                    }
-                );
-            }
-
-            const filePath =
-                path.join(
-                    correctionsDir,
-                    "corrections.json"
-                );
-
-            let corrections = [];
-
-            if (
-                fs.existsSync(
-                    filePath
-                )
-            ) {
-                try {
-                    const existing =
-                        fs.readFileSync(
-                            filePath,
-                            "utf8"
-                        );
-
-                    const parsed =
-                        JSON.parse(
-                            existing
-                        );
-
-                    if (
-                        Array.isArray(
-                            parsed
-                        )
-                    ) {
-                        corrections =
-                            parsed;
-                    }
-                } catch {
-                    corrections = [];
-                }
-            }
-
-            corrections.push({
-                id:
-                    crypto.randomUUID(),
-
-                userId:
-                    req.userId,
-
-                question,
-
-                answer,
-
-                correction,
-
-                createdAt:
-                    new Date()
-                        .toISOString()
-            });
-
-            fs.writeFileSync(
-                filePath,
-                JSON.stringify(
-                    corrections,
-                    null,
-                    2
-                ),
-                "utf8"
-            );
-
-            return res.json({
-                success: true
-            });
-        } catch (error) {
-            console.error(
-                "CORRECTION ERROR:",
-                error
-            );
-
-            return res
-                .status(500)
-                .json({
-                    error:
-                        "حصل خطأ أثناء حفظ التصحيح."
-                });
-        }
-    }
-);
-
-
-/* =========================================================
-   GET CORRECTIONS
-   ========================================================= */
-
-app.get(
-    "/api/corrections",
-    requireLogin,
-    (req, res) => {
-        try {
-            const filePath =
-                path.join(
-                    __dirname,
-                    "knowledge",
-                    "corrections.json"
-                );
-
-            if (
-                !fs.existsSync(
-                    filePath
-                )
-            ) {
-                return res.json({
-                    corrections: []
-                });
-            }
-
-            const content =
-                fs.readFileSync(
-                    filePath,
-                    "utf8"
-                );
-
-            const corrections =
-                safeJsonParse(
-                    content
-                );
-
-            if (
-                !Array.isArray(
-                    corrections
-                )
-            ) {
-                return res.json({
-                    corrections: []
-                });
-            }
-
-            const userCorrections =
-                corrections.filter(
-                    item =>
-                        Number(
-                            item.userId
-                        ) ===
-                        Number(
-                            req.userId
-                        )
-                );
-
-            return res.json({
-                corrections:
-                    userCorrections
-            });
-        } catch (error) {
-            console.error(
-                "GET CORRECTIONS ERROR:",
-                error
-            );
-
-            return res
-                .status(500)
-                .json({
-                    error:
-                        "حصل خطأ أثناء تحميل التصحيحات."
-                });
-        }
-    }
-);
-
-
-/* =========================================================
-   HEALTH CHECK
-   ========================================================= */
-
-app.get(
-    "/api/health",
-    (req, res) => {
-        return res.json({
-            success: true,
-            status: "ok",
-            ai:
-                Boolean(ai),
-            model:
-                GEMINI_MODEL,
-            time:
-                new Date()
-                    .toISOString()
-        });
-    }
-);
-
-
-/* =========================================================
-   DEFAULT ROUTES
-   ========================================================= */
-
-app.get(
-    "/",
-    (req, res) => {
-        return res.sendFile(
-            path.join(
-                publicPath,
-                "index.html"
-            )
-        );
-    }
-);
-
-app.get(
-    "/login",
-    (req, res) => {
-        return res.sendFile(
-            path.join(
-                publicPath,
-                "login.html"
-            )
-        );
-    }
-);
-
-app.get(
-    "/chat",
-    (req, res) => {
-        return res.sendFile(
-            path.join(
-                publicPath,
-                "chat.html"
-            )
-        );
-    }
-);
-
-app.get(
-    "/study",
-    (req, res) => {
-        return res.sendFile(
-            path.join(
-                publicPath,
-                "study.html"
-            )
-        );
-    }
-);
-
-
-/* =========================================================
-   ERROR HANDLER
-   ========================================================= */
-
-app.use(
-    (error, req, res, next) => {
-        console.error(
-            "GLOBAL ERROR:",
-            error
-        );
-
-        if (
-            res.headersSent
-        ) {
-            return next(
-                error
-            );
-        }
-
-        return res
-            .status(500)
-            .json({
-                error:
-                    "حصل خطأ غير متوقع في السيرفر."
-            });
-    }
-);
-
-
-/* =========================================================
-   START SERVER
-   ========================================================= */
-
-app.listen(
-    PORT,
-    () => {
-        console.log(
-            `Physics AI server running on port ${PORT}`
-        );
-
-        console.log(
-            `Gemini model: ${GEMINI_MODEL}`
-        );
-
-        console.log(
-            `Gemini configured: ${Boolean(ai)}`
-        );
-    }
-);/* =========================================================
-   UNIT MAP
-   ========================================================= */
-
-const UNIT_MAP = {
+const UNIT_ALIASES = {
     متر: "m",
+
+    متر_مربع: "m²",
+
+    متر_مكعب: "m³",
 
     سنتيمتر: "cm",
 
-    ملليمتر: "mm",
+    سنتيمتر: "cm",
+
+    مليمتر: "mm",
 
     كيلومتر: "km",
 
-    ميكرومتر: "um",
+    جرام: "g",
 
-    نانومتر: "nm",
+    غرام: "g",
+
+    كيلوجرام: "kg",
+
+    كيلوغرام: "kg",
+
+    مليجرام: "mg",
+
+    ملليجرام: "mg",
 
     ثانية: "s",
 
+    ثواني: "s",
+
     دقيقة: "min",
+
+    دقائق: "min",
 
     ساعة: "h",
 
@@ -2403,10 +1059,9 @@ const UNIT_MAP = {
     كلفن: "K"
 };
 
-
 /* =========================================================
    DOMAIN RULES
-   ========================================================= */
+========================================================= */
 
 const DOMAIN_RULES = {
     mechanics: [
@@ -2427,372 +1082,266 @@ const DOMAIN_RULES = {
         "شغل",
         "قدرة",
         "سقوط حر",
-        "حركة",
-        "حركة دائرية",
-        "نابض",
-        "زنبرك",
-        "جاذبية"
+        "حركة"
     ],
 
     electricity: [
-        "كهرباء",
         "تيار",
         "جهد",
         "مقاومة",
-        "مكثف",
-        "شحنة",
-        "كولوم",
+        "كهرباء",
         "أوم",
-        "فولت",
-        "أمبير",
+        "كولوم",
+        "شحنة",
         "دائرة",
         "بطارية",
-        "توالي",
-        "توازي",
-        "كيرشوف",
-        "قدرة كهربائية"
+        "مكثف",
+        "حث",
+        "فيض",
+        "مجال كهربائي"
     ],
 
     waves: [
         "موجة",
-        "موجات",
         "تردد",
         "طول موجي",
         "سعة",
+        "اهتزاز",
         "صوت",
-        "انعكاس",
-        "انكسار",
-        "حيود",
+        "سرعة الموجة",
         "تداخل",
-        "رنين"
+        "حيود",
+        "انعكاس"
     ],
 
     optics: [
-        "ضوء",
-        "بصريات",
         "عدسة",
         "مرآة",
         "بؤرة",
-        "بعد بؤري",
+        "بؤري",
         "تكبير",
+        "انكسار",
         "انعكاس الضوء",
-        "انكسار الضوء",
+        "ضوء",
+        "شعاع",
         "منشور"
     ],
 
     thermodynamics: [
         "حرارة",
         "درجة حرارة",
-        "حراري",
+        "كلفن",
+        "غاز",
+        "ضغط",
+        "حجم",
         "تمدد",
         "انكماش",
-        "ضغط",
-        "غاز",
-        "قانون بويل",
-        "قانون شارل",
         "ديناميكا حرارية",
-        "حرارة نوعية",
-        "انصهار",
-        "تبخر"
+        "حراري"
     ],
 
-    modernPhysics: [
-        "ذرة",
-        "إلكترون",
-        "فوتون",
+    modern: [
         "كم",
-        "كمية",
-        "نواة",
-        "إشعاع",
-        "نشاط إشعاعي",
-        "نصف العمر",
+        "كمية حركة",
+        "فوتون",
+        "بلانك",
         "نسبية",
-        "طاقة الفوتون",
-        "دالة الشغل",
-        "تأثير كهروضوئي"
+        "كتلة سكون",
+        "طاقة سكون",
+        "إلكترون",
+        "ذرة",
+        "نواة",
+        "نصف عمر",
+        "نشاط إشعاعي",
+        "طيف"
     ],
 
-    magnetism: [
-        "مغناطيس",
-        "مغناطيسية",
-        "مجال مغناطيسي",
-        "فيض مغناطيسي",
-        "حث",
-        "فاراداي",
-        "لينز",
-        "ملف",
-        "محث",
-        "قوة لورنتز"
+    fluids: [
+        "سائل",
+        "لزوجة",
+        "ضغط السائل",
+        "كثافة",
+        "طفو",
+        "أرخميدس",
+        "برنولي",
+        "مائع",
+        "معدل السريان"
     ]
 };
 
-
 /* =========================================================
-   DETECT PHYSICS DOMAIN
-   ========================================================= */
+   NORMALIZE ARABIC UNITS
+========================================================= */
 
-function detectPhysicsDomain(text) {
-    const value =
-        cleanText(text)
-            .toLowerCase();
+function normalizeArabicUnits(
+    text
+) {
+    let result =
+        String(text || "");
 
-    const scores = {};
+    const replacements = [
+        [
+            /كيلومتر\s*\/\s*ساعة/gi,
+            "km/h"
+        ],
+
+        [
+            /كيلو\s*متر\s*\/\s*ساعة/gi,
+            "km/h"
+        ],
+
+        [
+            /متر\s*\/\s*ثانية/gi,
+            "m/s"
+        ],
+
+        [
+            /متر\s*في\s*الثانية/gi,
+            "m/s"
+        ],
+
+        [
+            /متر\s*لكل\s*ثانية/gi,
+            "m/s"
+        ],
+
+        [
+            /كيلوجرام/gi,
+            "kg"
+        ],
+
+        [
+            /كيلوغرام/gi,
+            "kg"
+        ],
+
+        [
+            /جرام/gi,
+            "g"
+        ],
+
+        [
+            /غرام/gi,
+            "g"
+        ],
+
+        [
+            /سنتيمتر/gi,
+            "cm"
+        ],
+
+        [
+            /مليمتر/gi,
+            "mm"
+        ],
+
+        [
+            /كيلومتر/gi,
+            "km"
+        ],
+
+        [
+            /متر/gi,
+            "m"
+        ],
+
+        [
+            /ثانية/gi,
+            "s"
+        ],
+
+        [
+            /ثواني/gi,
+            "s"
+        ],
+
+        [
+            /دقيقة/gi,
+            "min"
+        ],
+
+        [
+            /دقائق/gi,
+            "min"
+        ],
+
+        [
+            /ساعة/gi,
+            "h"
+        ],
+
+        [
+            /ساعات/gi,
+            "h"
+        ],
+
+        [
+            /نيوتن/gi,
+            "N"
+        ],
+
+        [
+            /جول/gi,
+            "J"
+        ],
+
+        [
+            /وات/gi,
+            "W"
+        ],
+
+        [
+            /واط/gi,
+            "W"
+        ],
+
+        [
+            /أمبير/gi,
+            "A"
+        ],
+
+        [
+            /امبير/gi,
+            "A"
+        ],
+
+        [
+            /فولت/gi,
+            "V"
+        ],
+
+        [
+            /كولوم/gi,
+            "C"
+        ],
+
+        [
+            /هرتز/gi,
+            "Hz"
+        ]
+    ];
 
     for (
-        const [domain, keywords]
-        of Object.entries(
-            DOMAIN_RULES
-        )
+        const [pattern, replacement]
+        of replacements
     ) {
-        scores[domain] = 0;
-
-        for (
-            const keyword
-            of keywords
-        ) {
-            if (
-                value.includes(
-                    keyword
-                )
-            ) {
-                scores[domain]++;
-            }
-        }
+        result =
+            result.replace(
+                pattern,
+                replacement
+            );
     }
 
-    let bestDomain =
-        "general";
-
-    let bestScore = 0;
-
-    for (
-        const [domain, score]
-        of Object.entries(scores)
-    ) {
-        if (
-            score > bestScore
-        ) {
-            bestScore = score;
-            bestDomain = domain;
-        }
-    }
-
-    return {
-        domain: bestDomain,
-        score: bestScore,
-        scores
-    };
+    return result;
 }
 
-
 /* =========================================================
-   PHYSICS KNOWLEDGE PROMPT
-   ========================================================= */
+   NORMALIZE NUMBER TOKENS
+========================================================= */
 
-function getDomainInstructions(
-    domain
+function normalizeNumberToken(
+    value
 ) {
-    const instructions = {
-        mechanics: `
-المجال: الميكانيكا.
-
-ركز على:
-- قوانين نيوتن.
-- الحركة.
-- السرعة والتسارع.
-- الشغل والطاقة.
-- الزخم.
-- الاحتكاك.
-- الحركة الدائرية.
-- الجاذبية.
-- مسائل السقوط الحر.
-`,
-
-        electricity: `
-المجال: الكهرباء.
-
-ركز على:
-- قانون أوم.
-- التيار والجهد والمقاومة.
-- التوصيل على التوالي والتوازي.
-- القدرة والطاقة الكهربائية.
-- الشحنة.
-- الدوائر الكهربائية.
-- قوانين كيرشوف عند الحاجة.
-`,
-
-        waves: `
-المجال: الموجات.
-
-ركز على:
-- التردد.
-- الزمن الدوري.
-- الطول الموجي.
-- سرعة الموجة.
-- السعة.
-- التداخل.
-- الحيود.
-- الانعكاس والانكسار.
-- الصوت.
-`,
-
-        optics: `
-المجال: البصريات.
-
-ركز على:
-- المرايا.
-- العدسات.
-- البعد البؤري.
-- الصورة الحقيقية والافتراضية.
-- التكبير.
-- الانعكاس.
-- الانكسار.
-`,
-
-        thermodynamics: `
-المجال: الحرارة والديناميكا الحرارية.
-
-ركز على:
-- الحرارة.
-- درجة الحرارة.
-- السعة الحرارية.
-- الحرارة النوعية.
-- تغيرات الحالة.
-- قوانين الغازات.
-- الضغط والحجم ودرجة الحرارة.
-`,
-
-        modernPhysics: `
-المجال: الفيزياء الحديثة.
-
-ركز على:
-- الفوتونات.
-- الإلكترونات.
-- التأثير الكهروضوئي.
-- الذرة.
-- النواة.
-- النشاط الإشعاعي.
-- نصف العمر.
-- النسبية.
-`,
-
-        magnetism: `
-المجال: المغناطيسية والكهرومغناطيسية.
-
-ركز على:
-- المجال المغناطيسي.
-- الفيض.
-- الحث الكهرومغناطيسي.
-- قانون فاراداي.
-- قانون لينز.
-- قوة لورنتز.
-`,
-
-        general: `
-المجال: فيزياء عامة.
-
-حدد القانون أو الفكرة المطلوبة من السؤال
-قبل إعطاء النتيجة.
-`
-    };
-
-    return (
-        instructions[domain] ||
-        instructions.general
-    );
-}
-
-
-/* =========================================================
-   ADVANCED PHYSICS PROMPT
-   ========================================================= */
-
-function buildAdvancedPhysicsPrompt(
-    question,
-    history = []
-) {
-    const detection =
-        detectPhysicsDomain(
-            question
-        );
-
-    const domainInstructions =
-        getDomainInstructions(
-            detection.domain
-        );
-
-    let prompt = `
-أنت THANO، مدرس فيزياء مصري
-متخصص في تدريس طلاب الثانوية.
-
-مهمتك حل وفهم مسائل الفيزياء
-بدقة شديدة.
-
-${SIMPLE_STYLE}
-
-${domainInstructions}
-
-قبل الإجابة:
-1. حدد المطلوب من السؤال.
-2. حدد المعطيات.
-3. حدد القانون المناسب.
-4. راجع الوحدات.
-5. احسب النتيجة بدقة.
-6. راجع النتيجة قبل إرسالها.
-
-إذا كان السؤال اختيار من متعدد:
-حدد الاختيار الصحيح بوضوح.
-
-إذا كانت هناك صورة:
-اقرأ المسألة من الصورة بعناية.
-لا تفترض أرقامًا غير واضحة.
-
-السؤال:
-${question}
-`;
-
-    if (
-        history &&
-        Array.isArray(history) &&
-        history.length
-    ) {
-        prompt += `
-
-المحادثة السابقة:
-
-`;
-
-        for (
-            const item of history
-        ) {
-            const role =
-                item.role === "user"
-                    ? "الطالب"
-                    : "THANO";
-
-            const content =
-                cleanText(
-                    item.content
-                );
-
-            if (!content) {
-                continue;
-            }
-
-            prompt +=
-                `${role}: ${content}\n`;
-        }
-    }
-
-    return prompt;
-}
-
-
-/* =========================================================
-   NUMERICAL HELPERS
-   ========================================================= */
-
-function toNumber(value) {
     if (
         value === null ||
         value === undefined
@@ -2800,294 +1349,1687 @@ function toNumber(value) {
         return null;
     }
 
-    if (
-        typeof value === "number"
-    ) {
-        return Number.isFinite(
-            value
-        )
-            ? value
-            : null;
-    }
-
-    const normalized =
+    let text =
         String(value)
-            .replace(
-                /،/g,
-                "."
-            )
-            .replace(
-                /,/g,
-                "."
-            )
-            .trim();
+            .trim()
+            .replace(/،/g, ".")
+            .replace(/٫/g, ".")
+            .replace(/,/g, "");
 
-    const number =
-        Number(
-            normalized
+    const arabicDigits = {
+        "٠": "0",
+        "١": "1",
+        "٢": "2",
+        "٣": "3",
+        "٤": "4",
+        "٥": "5",
+        "٦": "6",
+        "٧": "7",
+        "٨": "8",
+        "٩": "9"
+    };
+
+    text =
+        text.replace(
+            /[٠-٩]/g,
+            (digit) =>
+                arabicDigits[digit]
         );
 
-    return Number.isFinite(
-        number
-    )
-        ? number
+    const result =
+        Number(text);
+
+    return Number.isFinite(result)
+        ? result
         : null;
 }
 
-
-function formatNumber(
-    value
-) {
-    const number =
-        toNumber(value);
-
-    if (
-        number === null
-    ) {
-        return "";
-    }
-
-    if (
-        Math.abs(number) >=
-        0.000001 &&
-        Math.abs(number) < 1000000
-    ) {
-        return Number(
-            number.toFixed(6)
-        ).toString();
-    }
-
-    return number
-        .toExponential(4)
-        .replace(
-            "e+",
-            "e"
-        );
-}
-
-
 /* =========================================================
-   UNIT NORMALIZATION
-   ========================================================= */
+   EXTRACT QUANTITIES
+========================================================= */
 
-function normalizeUnit(
-    unit
+function extractQuantities(
+    text
 ) {
-    if (!unit) {
-        return "";
-    }
-
-    const value =
-        cleanText(unit)
-            .toLowerCase();
-
-    if (
-        UNIT_MAP[value]
-    ) {
-        return UNIT_MAP[value];
-    }
-
-    return value;
-}
-
-
-function convertUnitValue(
-    value,
-    fromUnit,
-    toUnit
-) {
-    const number =
-        toNumber(value);
-
-    if (
-        number === null
-    ) {
-        return null;
-    }
-
-    const from =
-        normalizeUnit(
-            fromUnit
+    const normalized =
+        normalizeArabicUnits(
+            text
         );
 
-    const to =
-        normalizeUnit(
-            toUnit
-        );
+    const quantities = [];
 
-    if (
-        !from ||
-        !to ||
-        from === to
+    const regex =
+        /(-?\d+(?:\.\d+)?)\s*([a-zA-Z]+(?:\/[a-zA-Z]+)?|m\/s|km\/h|N|J|W|Pa|V|A|C|Hz)?/g;
+
+    let match;
+
+    while (
+        (match =
+            regex.exec(
+                normalized
+            )) !== null
     ) {
-        return number;
-    }
-
-    const lengthFactors = {
-        m: 1,
-        cm: 0.01,
-        mm: 0.001,
-        km: 1000,
-        um: 0.000001,
-        nm: 0.000000001
-    };
-
-    if (
-        lengthFactors[from] &&
-        lengthFactors[to]
-    ) {
-        return (
-            number *
-            lengthFactors[from] /
-            lengthFactors[to]
-        );
-    }
-
-    const timeFactors = {
-        s: 1,
-        min: 60,
-        h: 3600
-    };
-
-    if (
-        timeFactors[from] &&
-        timeFactors[to]
-    ) {
-        return (
-            number *
-            timeFactors[from] /
-            timeFactors[to]
-        );
-    }
-
-    return null;
-}
-
-
-/* =========================================================
-   CREATE CONVERSATION IF NEEDED
-   ========================================================= */
-
-function ensureConversation(
-    userId,
-    conversationId,
-    title
-) {
-    let id =
-        Number(
-            conversationId
-        );
-
-    if (
-        Number.isFinite(id) &&
-        id > 0
-    ) {
-        const existing =
-            db.prepare(`
-                SELECT id
-                FROM conversations
-                WHERE id = ?
-                AND user_id = ?
-            `).get(
-                id,
-                userId
+        const value =
+            normalizeNumberToken(
+                match[1]
             );
 
-        if (existing) {
-            return id;
+        if (
+            value === null
+        ) {
+            continue;
+        }
+
+        quantities.push({
+            value,
+
+            unit:
+                match[2] ||
+                null
+        });
+    }
+
+    return quantities;
+}
+
+/* =========================================================
+   DETECT DOMAINS
+========================================================= */
+
+function detectDomains(
+    text
+) {
+    const normalized =
+        String(text || "")
+            .toLowerCase();
+
+    const found = [];
+
+    for (
+        const [
+            domain,
+            keywords
+        ] of Object.entries(
+            DOMAIN_RULES
+        )
+    ) {
+        const matches =
+            keywords.filter(
+                (keyword) =>
+                    normalized.includes(
+                        keyword.toLowerCase()
+                    )
+            );
+
+        if (
+            matches.length > 0
+        ) {
+            found.push({
+                domain,
+
+                matches
+            });
         }
     }
 
-    const result =
-        db.prepare(`
-            INSERT INTO conversations
-            (
-                user_id,
-                title
-            )
-            VALUES (?, ?)
-        `).run(
-            userId,
-            makeTitle(
-                title ||
-                "محادثة جديدة"
-            )
-        );
-
-    id =
-        Number(
-            result.lastInsertRowid
-        );
-
-    return id;
+    return found;
 }
 
-
 /* =========================================================
-   UPDATE CONVERSATION
-   ========================================================= */
+   COMPLEXITY SCORE
+========================================================= */
 
-function touchConversation(
-    conversationId
+function complexityScore(
+    text
 ) {
-    db.prepare(`
-        UPDATE conversations
-        SET updated_at =
-            CURRENT_TIMESTAMP
-        WHERE id = ?
-    `).run(
-        conversationId
+    const input =
+        String(text || "");
+
+    let score = 0;
+
+    const quantities =
+        extractQuantities(
+            input
+        );
+
+    const domains =
+        detectDomains(
+            input
+        );
+
+    score +=
+        Math.min(
+            quantities.length * 2,
+            10
+        );
+
+    score +=
+        Math.min(
+            domains.length * 3,
+            12
+        );
+
+    const complexWords = [
+        "أثبت",
+        "برهن",
+        "اشتق",
+        "اشتقاق",
+        "قارن",
+        "احسب",
+        "استنتج",
+        "معادلة",
+        "معادلات",
+        "دائرة",
+        "دوائر",
+        "عدة",
+        "مرحلة",
+        "خطوات",
+        "بيانات",
+        "جدول",
+        "رسم",
+        "منحنى",
+        "طاقة",
+        "زخم",
+        "مجال",
+        "جهد",
+        "تيار",
+        "مقاومة",
+        "موجة"
+    ];
+
+    for (
+        const word
+        of complexWords
+    ) {
+        if (
+            input.includes(word)
+        ) {
+            score += 1;
+        }
+    }
+
+    if (
+        input.length > 500
+    ) {
+        score += 3;
+    }
+
+    if (
+        input.length > 1000
+    ) {
+        score += 4;
+    }
+
+    return Math.min(
+        score,
+        30
     );
 }
 
+/* =========================================================
+   PREFLIGHT
+========================================================= */
+
+function buildPreflight(
+    question
+) {
+    const quantities =
+        extractQuantities(
+            question
+        );
+
+    const domains =
+        detectDomains(
+            question
+        );
+
+    const score =
+        complexityScore(
+            question
+        );
+
+    return {
+        score,
+
+        quantities,
+
+        domains,
+
+        normalized:
+            normalizeArabicUnits(
+                question
+            )
+    };
+}
 
 /* =========================================================
-   SAVE MESSAGE HELPER
-   ========================================================= */
+   PHYSICS CONSTANTS TEXT
+========================================================= */
 
-function saveMessage(
-    conversationId,
-    role,
-    content,
-    image = null
+function getPhysicsConstantsText() {
+    return Object.entries(
+        PHYSICS_CONSTANTS
+    )
+        .map(
+            ([key, value]) =>
+                `${key} = ${value}`
+        )
+        .join("\n");
+}
+
+/* =========================================================
+   QUESTION INTENT
+========================================================= */
+
+function detectQuestionIntent(
+    text
 ) {
-    const result =
+    const input =
+        String(text || "")
+            .trim();
+
+    const lower =
+        input.toLowerCase();
+
+    const explainWords = [
+        "اشرح",
+        "شرح",
+        "وضح",
+        "توضيح",
+        "فهمني",
+        "مش فاهم",
+        "مش فاهمة",
+        "ليه",
+        "لماذا",
+        "ازاي",
+        "كيف"
+    ];
+
+    const solveWords = [
+        "حل",
+        "احسب",
+        "أوجد",
+        "هات الناتج",
+        "الناتج",
+        "الإجابة",
+        "الاجابة"
+    ];
+
+    const explain =
+        explainWords.some(
+            (word) =>
+                input.includes(word)
+        );
+
+    const solve =
+        solveWords.some(
+            (word) =>
+                input.includes(word)
+        );
+
+    if (
+        explain
+    ) {
+        return "explain";
+    }
+
+    if (
+        solve
+    ) {
+        return "solve";
+    }
+
+    return "normal";
+}
+
+/* =========================================================
+   SIMPLE STYLE
+========================================================= */
+
+const SIMPLE_STYLE = `
+اكتب إجاباتك بالعربية المصرية البسيطة المناسبة لطالب الثانوية العامة.
+
+ممنوع استخدام الإيموجي.
+
+ممنوع استخدام LaTeX.
+
+ممنوع استخدام رموز رياضية معقدة.
+
+ممنوع كتابة الضرب بالرمز * أو ×.
+
+اكتب الضرب بكلمة "في".
+
+اكتب القسمة بكلمة "على".
+
+اكتب الأسس بالكلمات.
+مثلاً:
+v تربيع
+a تربيع
+r تربيع
+
+بدلاً من:
+v^2
+a^2
+r^2
+
+استخدم علامات ترقيم عادية.
+
+خلي الجمل قصيرة وواضحة.
+
+لا تستخدم مصطلحات معقدة بدون شرحها.
+
+لو الطالب قال "حل":
+أعطِ الحل المطلوب والنتيجة بشكل مباشر بدون شرح طويل.
+
+لو الطالب قال "اشرح":
+اشرح الفكرة ثم القانون ثم التطبيق بالتدريج.
+
+لو السؤال عادي:
+جاوب بشكل طبيعي ومختصر وواضح.
+
+لا تضف معلومات لا يحتاجها السؤال.
+
+لا تخترع بيانات غير موجودة في السؤال.
+
+لو توجد بيانات ناقصة تمنع الحل، اطلب البيانات الناقصة فقط.
+`;
+
+/* =========================================================
+   EXPERT INSTRUCTIONS
+========================================================= */
+
+function buildExpertInstructions(
+    question,
+    history = []
+) {
+    const preflight =
+        buildPreflight(
+            question
+        );
+
+    const intent =
+        detectQuestionIntent(
+            question
+        );
+
+    const domainsText =
+        preflight.domains
+            .map(
+                (item) =>
+                    `${item.domain}: ${item.matches.join(", ")}`
+            )
+            .join("\n");
+
+    const quantitiesText =
+        preflight.quantities
+            .map(
+                (item) =>
+                    `${item.value} ${item.unit || ""}`.trim()
+            )
+            .join(", ");
+
+    return `
+أنت Physics AI، مدرس فيزياء مصري متخصص في مساعدة طلاب الثانوية العامة.
+
+${SIMPLE_STYLE}
+
+قواعد الدقة:
+
+1. اقرأ السؤال بالكامل قبل الإجابة.
+
+2. حدد المطلوب فعلاً.
+
+3. استخرج المعطيات.
+
+4. تأكد من الوحدات.
+
+5. لا تخلط بين الكميات الفيزيائية.
+
+6. استخدم القانون الفيزيائي الصحيح فقط.
+
+7. لا تفترض قيمة غير موجودة.
+
+8. لو توجد أكثر من خطوة، نفذها داخلياً بالترتيب.
+
+9. راجع الحساب قبل إرسال النتيجة.
+
+10. لو هناك تعارض بين بيانات السؤال والقانون، وضح المشكلة.
+
+11. لا تستخدم قانوناً من مجال مختلف.
+
+12. لا تقدم نتيجة رقمية إذا كانت البيانات لا تسمح بها.
+
+13. حافظ على الوحدات.
+
+14. إذا كان السؤال اختيار من متعدد، حدد الاختيار الصحيح مع سبب مختصر عند الحاجة.
+
+15. إذا كان السؤال يحتوي على صورة، اقرأ الصورة بدقة وحاول استخراج الرسم أو البيانات أو النص منها.
+
+16. لا تقل إنك لا تستطيع رؤية الصورة إذا كانت البيانات متاحة في الرسالة.
+
+17. إذا كانت الصورة غير واضحة فعلاً، اطلب صورة أوضح.
+
+18. لا تخترع أي بيانات من صورة غير واضحة.
+
+19. في المسائل الحسابية، احسب النتيجة بدقة.
+
+20. راجع الإشارة الموجبة والسالبة.
+
+21. راجع الأسس.
+
+22. راجع تحويل الوحدات.
+
+23. لا تكتب كلاماً مثل "ربما" إذا كانت الإجابة مؤكدة.
+
+24. إذا كان هناك أكثر من تفسير ممكن للسؤال، اختر التفسير الأكثر منطقية واذكر الافتراض باختصار.
+
+نية السؤال:
+${intent}
+
+درجة التعقيد:
+${preflight.score}
+
+المجالات المكتشفة:
+${domainsText || "غير محدد"}
+
+الكميات المستخرجة:
+${quantitiesText || "لا توجد كميات رقمية واضحة"}
+
+الثوابت الفيزيائية المتاحة:
+${getPhysicsConstantsText()}
+
+سؤال الطالب:
+${question}
+
+مهم جداً:
+لا تعرض التحليل الداخلي أو خطوات التفكير الخاصة بك.
+اعرض فقط الإجابة النهائية المناسبة للطالب.
+`;
+}
+
+/* =========================================================
+   CLEAN PHYSICS ANSWER
+========================================================= */
+
+function cleanPhysicsAnswer(
+    answer
+) {
+    let output =
+        String(answer || "");
+
+    output =
+        output.replace(
+            /```[\s\S]*?```/g,
+            (block) =>
+                block
+                    .replace(/```/g, "")
+                    .trim()
+        );
+
+    output =
+        output.replace(
+            /\$\$[\s\S]*?\$\$/g,
+            ""
+        );
+
+    output =
+        output.replace(
+            /\$([^$]+)\$/g,
+            "$1"
+        );
+
+    output =
+        output.replace(
+            /\\frac\s*\{([^}]*)\}\s*\{([^}]*)\}/g,
+            "$1 على $2"
+        );
+
+    output =
+        output.replace(
+            /\\times/g,
+            " في "
+        );
+
+    output =
+        output.replace(
+            /\\cdot/g,
+            " في "
+        );
+
+    output =
+        output.replace(
+            /\*/g,
+            " في "
+        );
+
+    output =
+        output.replace(
+            /×/g,
+            " في "
+        );
+
+    output =
+        output.replace(
+            /\^2/g,
+            " تربيع"
+        );
+
+    output =
+        output.replace(
+            /\^3/g,
+            " تكعيب"
+        );
+
+    output =
+        output.replace(
+            /\^([0-9]+)/g,
+            " أس $1"
+        );
+
+    output =
+        output.replace(
+            /\/+/g,
+            " على "
+        );
+
+    output =
+        output.replace(
+            /\\sqrt\s*\{([^}]*)\}/g,
+            "الجذر التربيعي لـ $1"
+        );
+
+    output =
+        output.replace(
+            /\\left/g,
+            ""
+        );
+
+    output =
+        output.replace(
+            /\\right/g,
+            ""
+        );
+
+    output =
+        output.replace(
+            /\\text\s*\{([^}]*)\}/g,
+            "$1"
+        );
+
+    output =
+        output.replace(
+            /\s{2,}/g,
+            " "
+        );
+
+    output =
+        output.replace(
+            /\n{3,}/g,
+            "\n\n"
+        );
+
+    return output.trim();
+}
+
+/* =========================================================
+   GEMINI RETRY SYSTEM
+========================================================= */
+
+function getGeminiStatus(
+    error
+) {
+    return Number(
+        error?.status ||
+            error?.statusCode ||
+            error?.response?.status ||
+            0
+    );
+}
+
+function getRetryAfterMs(
+    error
+) {
+    const retryAfter =
+        error?.response?.headers?.get?.(
+            "retry-after"
+        ) ??
+        error?.headers?.get?.(
+            "retry-after"
+        ) ??
+        error?.response?.headers?.[
+            "retry-after"
+        ] ??
+        error?.headers?.[
+            "retry-after"
+        ];
+
+    const seconds =
+        Number(
+            retryAfter
+        );
+
+    if (
+        Number.isFinite(
+            seconds
+        ) &&
+        seconds > 0
+    ) {
+        return Math.min(
+            seconds * 1000,
+            15000
+        );
+    }
+
+    return 0;
+}
+
+function isRetryableGeminiError(
+    error
+) {
+    const status =
+        getGeminiStatus(
+            error
+        );
+
+    return (
+        status === 429 ||
+        status === 503 ||
+        status === 502 ||
+        status === 504 ||
+        status === 408
+    );
+}
+
+async function generateGeminiWithRetry(
+    options,
+    label = "Gemini"
+) {
+    const maxRetries = 3;
+
+    const baseDelay = 1000;
+
+    let lastError;
+
+    for (
+        let attempt = 0;
+        attempt <= maxRetries;
+        attempt++
+    ) {
+        try {
+            return await ai.models.generateContent(
+                options
+            );
+        } catch (error) {
+            lastError = error;
+
+            const status =
+                getGeminiStatus(
+                    error
+                );
+
+            if (
+                !isRetryableGeminiError(
+                    error
+                ) ||
+                attempt ===
+                    maxRetries
+            ) {
+                throw error;
+            }
+
+            const retryAfter =
+                getRetryAfterMs(
+                    error
+                );
+
+            const exponential =
+                Math.min(
+                    baseDelay *
+                        2 **
+                            attempt,
+                    8000
+                );
+
+            const jitter =
+                Math.floor(
+                    Math.random() *
+                        500
+                );
+
+            const delay =
+                Math.max(
+                    retryAfter,
+                    exponential +
+                        jitter
+                );
+
+            console.warn(
+                `${label}: retry ${
+                    attempt + 1
+                }/${maxRetries} after ${delay}ms (status ${status})`
+            );
+
+            await new Promise(
+                (resolve) =>
+                    setTimeout(
+                        resolve,
+                        delay
+                    )
+            );
+        }
+    }
+
+    throw lastError;
+}
+
+/* =========================================================
+   GEMINI CALL
+========================================================= */
+
+async function callGemini(
+    contents,
+    systemInstruction,
+    temperature = 0.2
+) {
+    return generateGeminiWithRetry(
+        {
+            model:
+                GEMINI_MODEL,
+
+            contents,
+
+            config: {
+                temperature,
+
+                systemInstruction
+            }
+        },
+        "Gemini"
+    );
+}
+
+/* =========================================================
+   VERIFY COMPLEX ANSWER
+========================================================= */
+
+async function verifyComplexAnswer({
+    question,
+    answer,
+    preflight
+}) {
+    try {
+        if (
+            !answer ||
+            preflight.score < 8
+        ) {
+            return answer;
+        }
+
+        const verificationPrompt = `
+أنت مراجع فيزياء.
+
+راجع الإجابة التالية مقابل سؤال الطالب.
+
+لا تعيد كتابة الإجابة بالكامل إلا إذا كان هناك خطأ.
+
+افحص:
+
+- القانون
+- الحساب
+- الوحدات
+- الإشارات
+- الأسس
+- النتيجة
+- هل تم فهم المطلوب بشكل صحيح
+
+إذا كانت الإجابة صحيحة:
+أعدها كما هي تقريباً.
+
+إذا كان بها خطأ:
+صحح الخطأ.
+
+ممنوع استخدام LaTeX.
+ممنوع الرموز الرياضية المعقدة.
+استخدم العربية المصرية البسيطة.
+
+السؤال:
+${question}
+
+الإجابة:
+${answer}
+
+المجالات:
+${JSON.stringify(
+    preflight.domains
+)}
+
+الكميات:
+${JSON.stringify(
+    preflight.quantities
+)}
+`;
+
+        const response =
+            await callGemini(
+                [
+                    {
+                        role: "user",
+
+                        parts: [
+                            {
+                                text:
+                                    verificationPrompt
+                            }
+                        ]
+                    }
+                ],
+                SIMPLE_STYLE,
+                0.1
+            );
+
+        const verified =
+            cleanPhysicsAnswer(
+                String(
+                    response.text ||
+                        answer
+                )
+            );
+
+        return (
+            verified ||
+            answer
+        );
+    } catch (error) {
+        console.error(
+            "VERIFY ERROR:",
+            error
+        );
+
+        return answer;
+    }
+}
+
+/* =========================================================
+   CHAT MEMORY
+========================================================= */
+
+function getConversationHistory(
+    conversationId,
+    limit = 20
+) {
+    const safeLimit =
+        Math.max(
+            1,
+            Math.min(
+                Number(limit) ||
+                    20,
+                40
+            )
+        );
+
+    const messages =
         db.prepare(`
-            INSERT INTO messages
-            (
-                conversation_id,
+            SELECT
                 role,
                 content,
-                image
-            )
-            VALUES (?, ?, ?, ?)
-        `).run(
-            conversationId,
-            role,
-            cleanText(content),
-            image
+                image,
+                created_at
+            FROM messages
+            WHERE conversation_id = ?
+            ORDER BY id DESC
+            LIMIT ${safeLimit}
+        `).all(
+            conversationId
         );
 
-    touchConversation(
-        conversationId
-    );
+    return messages.reverse();
+}
 
-    return db.prepare(`
-        SELECT
-            id,
-            conversation_id,
-            role,
-            content,
-            image,
-            created_at
-        FROM messages
-        WHERE id = ?
-    `).get(
-        Number(
-            result.lastInsertRowid
-        )
+/* =========================================================
+   BUILD GEMINI HISTORY
+========================================================= */
+
+function buildGeminiHistory(
+    messages
+) {
+    return messages.map(
+        (message) => {
+            const parts = [];
+
+            if (
+                message.content
+            ) {
+                parts.push({
+                    text:
+                        message.content
+                });
+            }
+
+            if (
+                message.image
+            ) {
+                const image =
+                    String(
+                        message.image
+                    );
+
+                const match =
+                    image.match(
+                        /^data:([^;]+);base64,(.+)$/
+                    );
+
+                if (match) {
+                    parts.push({
+                        inlineData: {
+                            mimeType:
+                                match[1],
+
+                            data:
+                                match[2]
+                        }
+                    });
+                }
+            }
+
+            return {
+                role:
+                    message.role ===
+                    "assistant"
+                        ? "model"
+                        : "user",
+
+                parts
+            };
+        }
     );
 }
+
 /* =========================================================
-   END OF SERVER.JS
-   ========================================================= */
+   CHAT API
+========================================================= */
+
+app.post(
+    "/api/chat",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const question =
+                cleanString(
+                    req.body?.message,
+                    20000
+                );
+
+            let conversationId =
+                Number(
+                    req.body
+                        ?.conversationId
+                );
+
+            const image =
+                cleanString(
+                    req.body?.image,
+                    20000000
+                );
+
+            if (
+                !question &&
+                !image
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب سؤالك أو أرسل صورة."
+                    });
+            }
+
+            if (
+                !Number.isInteger(
+                    conversationId
+                ) ||
+                conversationId <= 0
+            ) {
+                const createdAt =
+                    nowISO();
+
+                const title =
+                    question
+                        ? question.slice(
+                              0,
+                              80
+                          )
+                        : "دردشة جديدة";
+
+                const result =
+                    db.prepare(`
+                        INSERT INTO conversations (
+                            user_id,
+                            title,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (?, ?, ?, ?)
+                    `).run(
+                        req.session.userId,
+                        title,
+                        createdAt,
+                        createdAt
+                    );
+
+                conversationId =
+                    Number(
+                        result.lastInsertRowid
+                    );
+            }
+
+            const conversation =
+                db.prepare(`
+                    SELECT
+                        id,
+                        title
+                    FROM conversations
+                    WHERE id = ?
+                    AND user_id = ?
+                `).get(
+                    conversationId,
+                    req.session.userId
+                );
+
+            if (!conversation) {
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "المحادثة غير موجودة."
+                    });
+            }
+
+            const previousMessages =
+                getConversationHistory(
+                    conversationId,
+                    20
+                );
+
+            const userMessageText =
+                question ||
+                "أريد المساعدة في فهم الصورة.";
+
+            const preflight =
+                buildPreflight(
+                    userMessageText
+                );
+
+            const systemInstruction =
+                buildExpertInstructions(
+                    userMessageText,
+                    previousMessages
+                );
+
+            const history =
+                buildGeminiHistory(
+                    previousMessages
+                );
+
+            const userParts = [];
+
+            userParts.push({
+                text:
+                    userMessageText
+            });
+
+            if (image) {
+                const match =
+                    image.match(
+                        /^data:([^;]+);base64,(.+)$/
+                    );
+
+                if (match) {
+                    userParts.push({
+                        inlineData: {
+                            mimeType:
+                                match[1],
+
+                            data:
+                                match[2]
+                        }
+                    });
+                }
+            }
+
+            history.push({
+                role: "user",
+
+                parts: userParts
+            });
+
+            const response =
+                await callGemini(
+                    history,
+                    systemInstruction,
+                    0.2
+                );
+
+            let answer =
+                cleanPhysicsAnswer(
+                    String(
+                        response.text ||
+                            ""
+                    )
+                );
+
+            if (!answer) {
+                answer =
+                    "مقدرتش أطلع إجابة من السؤال ده. حاول تكتبه بطريقة أوضح.";
+            }
+
+            if (
+                preflight.score >=
+                8
+            ) {
+                answer =
+                    await verifyComplexAnswer(
+                        {
+                            question:
+                                userMessageText,
+
+                            answer,
+
+                            preflight
+                        }
+                    );
+            }
+
+            const createdAt =
+                nowISO();
+
+            db.prepare(`
+                INSERT INTO messages (
+                    conversation_id,
+                    role,
+                    content,
+                    image,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+            `).run(
+                conversationId,
+                "user",
+                userMessageText,
+                image || null,
+                createdAt
+            );
+
+            db.prepare(`
+                INSERT INTO messages (
+                    conversation_id,
+                    role,
+                    content,
+                    image,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+            `).run(
+                conversationId,
+                "assistant",
+                answer,
+                null,
+                createdAt
+            );
+
+            db.prepare(`
+                UPDATE conversations
+                SET updated_at = ?
+                WHERE id = ?
+                AND user_id = ?
+            `).run(
+                createdAt,
+                conversationId,
+                req.session.userId
+            );
+
+            return res.json({
+                success: true,
+
+                conversationId,
+
+                answer,
+
+                message: answer
+            });
+        } catch (error) {
+            console.error(
+                "CHAT ERROR:",
+                error
+            );
+
+            const status =
+                getGeminiStatus(
+                    error
+                );
+
+            if (
+                status === 429
+            ) {
+                return res
+                    .status(429)
+                    .json({
+                        error:
+                            "تم الوصول إلى حد الاستخدام الحالي بعد عدة محاولات تلقائية. حاول بعد قليل."
+                    });
+            }
+
+            if (
+                status === 401 ||
+                status === 403
+            ) {
+                return res
+                    .status(500)
+                    .json({
+                        error:
+                            "مفتاح Gemini غير صحيح أو غير مصرح باستخدامه."
+                    });
+            }
+
+            if (
+                status === 502 ||
+                status === 503 ||
+                status === 504 ||
+                status === 408
+            ) {
+                return res
+                    .status(503)
+                    .json({
+                        error:
+                            "Gemini مشغول حاليًا. حاول بعد قليل."
+                    });
+            }
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تشغيل Physics AI."
+                });
+        }
+    }
+);
+
+/* =========================================================
+   TRANSCRIPTION
+========================================================= */
+
+app.post(
+    "/api/transcribe",
+    requireAuth,
+    upload.single("audio"),
+    async (req, res) => {
+        try {
+            if (!req.file) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "لم يتم إرسال تسجيل صوتي."
+                    });
+            }
+
+            const audioBase64 =
+                req.file.buffer.toString(
+                    "base64"
+                );
+
+            const mimeType =
+                String(
+                    req.file.mimetype ||
+                        "audio/webm"
+                )
+                    .split(";")[0]
+                    .trim();
+
+            const response =
+                await generateGeminiWithRetry(
+                    {
+                        model:
+                            GEMINI_MODEL,
+
+                        contents: [
+                            {
+                                text: `
+استمع إلى التسجيل.
+
+اكتب فقط كلام الطالب كنص.
+
+استخدم العربية المصرية الطبيعية.
+
+حافظ على المصطلحات العلمية والفيزيائية.
+
+لا تشرح.
+
+لا تحل السؤال.
+
+لا تضف أي كلام من عندك.
+
+لا تستخدم رموز غريبة.
+`
+                            },
+
+                            {
+                                inlineData: {
+                                    mimeType,
+
+                                    data:
+                                        audioBase64
+                                }
+                            }
+                        ]
+                    },
+                    "Transcription"
+                );
+
+            const text =
+                cleanPhysicsAnswer(
+                    String(
+                        response.text ||
+                            ""
+                    )
+                );
+
+            return res.json({
+                success: true,
+
+                text
+            });
+        } catch (error) {
+            console.error(
+                "TRANSCRIBE ERROR:",
+                error
+            );
+
+            const status =
+                getGeminiStatus(
+                    error
+                );
+
+            if (
+                status === 429
+            ) {
+                return res
+                    .status(429)
+                    .json({
+                        error:
+                            "تم الوصول إلى حد استخدام Gemini. حاول بعد قليل."
+                    });
+            }
+
+            if (
+                status === 401 ||
+                status === 403
+            ) {
+                return res
+                    .status(500)
+                    .json({
+                        error:
+                            "مفتاح Gemini غير صحيح أو غير مصرح باستخدامه."
+                    });
+            }
+
+            if (
+                status === 502 ||
+                status === 503 ||
+                status === 504 ||
+                status === 408
+            ) {
+                return res
+                    .status(503)
+                    .json({
+                        error:
+                            "خدمة الصوت مشغولة حاليًا. حاول بعد قليل."
+                    });
+            }
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تحويل التسجيل إلى نص."
+                });
+        }
+    }
+);
+
+/* =========================================================
+   HEALTH
+========================================================= */
+
+app.get(
+    "/api/health",
+    (req, res) => {
+        return res.json({
+            status: "ok",
+
+            model:
+                GEMINI_MODEL,
+
+            database:
+                "ready",
+
+            physicsAI:
+                "ready",
+
+            audio:
+                "ready",
+
+            image:
+                "ready",
+
+            timestamp:
+                nowISO()
+        });
+    }
+);
+
+/* =========================================================
+   ROOT ROUTES
+========================================================= */
+
+app.get(
+    "/",
+    (req, res) => {
+        return res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "index.html"
+            )
+        );
+    }
+);
+
+app.get(
+    "/login",
+    (req, res) => {
+        return res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "login.html"
+            )
+        );
+    }
+);
+
+app.get(
+    "/study",
+    (req, res) => {
+        return res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "study.html"
+            )
+        );
+    }
+);
+
+app.get(
+    "/chat",
+    (req, res) => {
+        return res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "chat.html"
+            )
+        );
+    }
+);
+
+/* =========================================================
+   ERROR HANDLER
+========================================================= */
+
+app.use(
+    (
+        error,
+        req,
+        res,
+        next
+    ) => {
+        console.error(
+            "GLOBAL ERROR:",
+            error
+        );
+
+        if (
+            error instanceof
+            multer.MulterError
+        ) {
+            return res
+                .status(400)
+                .json({
+                    error:
+                        "حجم الملف كبير أو نوع الملف غير مدعوم."
+                });
+        }
+
+        return res
+            .status(500)
+            .json({
+                error:
+                    "حصل خطأ غير متوقع في السيرفر."
+            });
+    }
+);
+
+/* =========================================================
+   START SERVER
+========================================================= */
+
+const server =
+    app.listen(
+        PORT,
+        () => {
+            console.log(
+                ""
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "        PHYSICS AI SERVER"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "Port:",
+                PORT
+            );
+
+            console.log(
+                "Model:",
+                GEMINI_MODEL
+            );
+
+            console.log(
+                "Authentication: READY"
+            );
+
+            console.log(
+                "Database: READY"
+            );
+
+            console.log(
+                "Physics AI: READY"
+            );
+
+            console.log(
+                "Audio: READY"
+            );
+
+            console.log(
+                "Image: READY"
+            );
+
+            console.log(
+                "Gemini Retry System: READY"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                ""
+            );
+        }
+    );
+
+/* =========================================================
+   GRACEFUL SHUTDOWN
+========================================================= */
+
+function shutdown(
+    signal
+) {
+    console.log(
+        `${signal} received. Shutting down...`
+    );
+
+    server.close(
+        () => {
+            try {
+                db.close();
+            } catch (
+                error
+            ) {
+                console.error(
+                    "DB CLOSE ERROR:",
+                    error
+                );
+            }
+
+            process.exit(0);
+        }
+    );
+}
+
+process.on(
+    "SIGTERM",
+    () =>
+        shutdown(
+            "SIGTERM"
+        )
+);
+
+process.on(
+    "SIGINT",
+    () =>
+        shutdown(
+            "SIGINT"
+        )
+);
