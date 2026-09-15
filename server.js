@@ -31,67 +31,25 @@ const GEMINI_MODEL =
     process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
 /* =========================================================
-   DATABASE
-========================================================= */
-
-const db = new Database(
-    path.join(__dirname, "physics-ai.db")
-);
-
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
-
-db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS conversations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        title TEXT NOT NULL DEFAULT 'محادثة جديدة',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-        FOREIGN KEY (user_id)
-        REFERENCES users(id)
-        ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversation_id INTEGER NOT NULL,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        image TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-        FOREIGN KEY (conversation_id)
-        REFERENCES conversations(id)
-        ON DELETE CASCADE
-    );
-`);
-
-/* =========================================================
-   MIDDLEWARE
+   APP CONFIG
 ========================================================= */
 
 app.use(
     express.json({
-        limit: "15mb"
+        limit: "25mb"
     })
 );
 
 app.use(
     express.urlencoded({
         extended: true,
-        limit: "15mb"
+        limit: "25mb"
     })
 );
+
+/* =========================================================
+   SESSION
+========================================================= */
 
 app.use(
     session({
@@ -109,9 +67,13 @@ app.use(
 
         cookie: {
             httpOnly: true,
+
             sameSite: "lax",
+
             secure: "auto",
+
             path: "/",
+
             maxAge:
                 1000 *
                 60 *
@@ -122,6 +84,10 @@ app.use(
     })
 );
 
+/* =========================================================
+   STATIC FILES
+========================================================= */
+
 app.use(
     express.static(
         path.join(__dirname, "public")
@@ -129,161 +95,216 @@ app.use(
 );
 
 /* =========================================================
-   IMAGE UPLOAD
+   DATABASE
 ========================================================= */
 
-const imageUpload = multer({
-    storage: multer.memoryStorage(),
+const db = new Database(
+    path.join(__dirname, "physics-ai.db")
+);
 
-    limits: {
-        fileSize: 10 * 1024 * 1024
-    },
+db.pragma("journal_mode = WAL");
 
-    fileFilter: function (req, file, cb) {
-        if (
-            file.mimetype &&
-            file.mimetype.startsWith("image/")
-        ) {
-            return cb(null, true);
-        }
-
-        cb(
-            new Error(
-                "يسمح برفع الصور فقط."
-            )
-        );
-    }
-});
+db.pragma("foreign_keys = ON");
 
 /* =========================================================
-   AUDIO UPLOAD
+   DATABASE TABLES
 ========================================================= */
 
-const audioUpload = multer({
-    storage: multer.memoryStorage(),
+db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    limits: {
-        fileSize: 25 * 1024 * 1024
-    },
+        name TEXT NOT NULL,
 
-    fileFilter: function (req, file, cb) {
-        const mime = String(
-            file.mimetype || ""
-        )
-            .toLowerCase()
-            .split(";")[0];
+        email TEXT NOT NULL UNIQUE,
 
-        if (mime.startsWith("audio/")) {
-            return cb(null, true);
-        }
+        password TEXT NOT NULL,
 
-        cb(
-            new Error(
-                "نوع الملف الصوتي غير مدعوم."
-            )
-        );
-    }
-});
+        created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS conversations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        user_id INTEGER NOT NULL,
+
+        title TEXT NOT NULL DEFAULT 'دردشة جديدة',
+
+        created_at TEXT NOT NULL,
+
+        updated_at TEXT NOT NULL,
+
+        FOREIGN KEY (user_id)
+            REFERENCES users(id)
+            ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        conversation_id INTEGER NOT NULL,
+
+        role TEXT NOT NULL,
+
+        content TEXT NOT NULL,
+
+        image TEXT,
+
+        created_at TEXT NOT NULL,
+
+        FOREIGN KEY (conversation_id)
+            REFERENCES conversations(id)
+            ON DELETE CASCADE
+    );
+`);
 
 /* =========================================================
-   AUTH HELPERS
+   HELPERS
 ========================================================= */
 
-function requireLogin(req, res, next) {
+function nowISO() {
+    return new Date().toISOString();
+}
+
+function saveSession(req) {
+    return new Promise(
+        (resolve, reject) => {
+            req.session.save((error) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+
+                resolve();
+            });
+        }
+    );
+}
+
+function regenerateSession(req) {
+    return new Promise(
+        (resolve, reject) => {
+            req.session.regenerate(
+                (error) => {
+                    if (error) {
+                        reject(error);
+                        return;
+                    }
+
+                    resolve();
+                }
+            );
+        }
+    );
+}
+
+function requireAuth(
+    req,
+    res,
+    next
+) {
     if (
         !req.session ||
         !req.session.userId
     ) {
         return res.status(401).json({
-            error: "لازم تسجل دخول الأول."
+            error:
+                "يجب تسجيل الدخول أولاً."
         });
     }
 
     next();
 }
 
-function saveSession(req, res, data) {
-    req.session.save(function (error) {
-        if (error) {
-            console.error(
-                "SESSION SAVE ERROR:",
-                error
-            );
+function cleanString(
+    value,
+    maxLength = 10000
+) {
+    if (
+        value === null ||
+        value === undefined
+    ) {
+        return "";
+    }
 
-            return res.status(500).json({
-                error:
-                    "حصل خطأ أثناء حفظ جلسة الدخول."
-            });
-        }
+    return String(value)
+        .trim()
+        .slice(0, maxLength);
+}
 
-        res.json(data);
-    });
+function normalizeEmail(email) {
+    return cleanString(email, 320)
+        .toLowerCase();
 }
 
 /* =========================================================
-   HOME
+   MULTER
 ========================================================= */
 
-app.get("/", function (req, res) {
-    res.sendFile(
-        path.join(
-            __dirname,
-            "public",
-            "index.html"
-        )
-    );
+const upload = multer({
+    storage: multer.memoryStorage(),
+
+    limits: {
+        fileSize:
+            15 *
+            1024 *
+            1024
+    }
 });
 
 /* =========================================================
-   REGISTER
+   AUTH
 ========================================================= */
 
 app.post(
     "/api/auth/register",
-    async function (req, res) {
+    async (req, res) => {
         try {
-            const name = String(
-                req.body.name || ""
-            )
-                .trim()
-                .slice(0, 80);
+            const name =
+                cleanString(
+                    req.body?.name,
+                    100
+                );
 
-            const email = String(
-                req.body.email || ""
-            )
-                .trim()
-                .toLowerCase()
-                .slice(0, 160);
+            const email =
+                normalizeEmail(
+                    req.body?.email
+                );
 
-            const password = String(
-                req.body.password || ""
-            );
+            const password =
+                String(
+                    req.body?.password ||
+                        ""
+                );
 
             if (!name) {
-                return res.status(400).json({
-                    error: "اكتب اسمك."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب اسمك."
+                    });
             }
 
             if (!email) {
-                return res.status(400).json({
-                    error:
-                        "اكتب البريد الإلكتروني."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب البريد الإلكتروني."
+                    });
             }
 
-            if (!email.includes("@")) {
-                return res.status(400).json({
-                    error:
-                        "اكتب بريد إلكتروني صحيح."
-                });
-            }
-
-            if (password.length < 6) {
-                return res.status(400).json({
-                    error:
-                        "كلمة السر لازم تكون 6 أحرف على الأقل."
-                });
+            if (
+                password.length <
+                6
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "كلمة السر لازم تكون 6 أحرف على الأقل."
+                    });
             }
 
             const existingUser =
@@ -294,10 +315,12 @@ app.post(
                 `).get(email);
 
             if (existingUser) {
-                return res.status(409).json({
-                    error:
-                        "البريد الإلكتروني مستخدم بالفعل."
-                });
+                return res
+                    .status(409)
+                    .json({
+                        error:
+                            "البريد الإلكتروني مستخدم بالفعل."
+                    });
             }
 
             const hashedPassword =
@@ -306,104 +329,90 @@ app.post(
                     12
                 );
 
+            const createdAt =
+                nowISO();
+
             const result =
                 db.prepare(`
-                    INSERT INTO users
-                    (name, email, password)
-                    VALUES (?, ?, ?)
+                    INSERT INTO users (
+                        name,
+                        email,
+                        password,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?)
                 `).run(
                     name,
                     email,
-                    hashedPassword
+                    hashedPassword,
+                    createdAt
                 );
 
-            req.session.regenerate(
-                function (sessionError) {
-                    if (sessionError) {
-                        console.error(
-                            "SESSION REGENERATE ERROR:",
-                            sessionError
-                        );
-
-                        return res.status(500).json({
-                            error:
-                                "تعذر إنشاء جلسة الدخول."
-                        });
-                    }
-
-                    req.session.userId =
-                        Number(
-                            result.lastInsertRowid
-                        );
-
-                    req.session.userName =
-                        name;
-
-                    req.session.authenticated =
-                        true;
-
-                    saveSession(req, res, {
-                        success: true,
-
-                        user: {
-                            id:
-                                Number(
-                                    result.lastInsertRowid
-                                ),
-                            name,
-                            email
-                        }
-                    });
-                }
+            await regenerateSession(
+                req
             );
+
+            req.session.userId =
+                result.lastInsertRowid;
+
+            req.session.userName =
+                name;
+
+            req.session.authenticated =
+                true;
+
+            await saveSession(req);
+
+            return res.json({
+                success: true,
+
+                user: {
+                    id:
+                        result.lastInsertRowid,
+
+                    name,
+
+                    email
+                }
+            });
         } catch (error) {
             console.error(
                 "REGISTER ERROR:",
                 error
             );
 
-            if (
-                error &&
-                error.code ===
-                    "SQLITE_CONSTRAINT_UNIQUE"
-            ) {
-                return res.status(409).json({
+            return res
+                .status(500)
+                .json({
                     error:
-                        "البريد الإلكتروني مستخدم بالفعل."
+                        "حصل خطأ أثناء إنشاء الحساب."
                 });
-            }
-
-            res.status(500).json({
-                error:
-                    "حصل خطأ أثناء إنشاء الحساب."
-            });
         }
     }
 );
 
-/* =========================================================
-   LOGIN
-========================================================= */
-
 app.post(
     "/api/auth/login",
-    async function (req, res) {
+    async (req, res) => {
         try {
-            const email = String(
-                req.body.email || ""
-            )
-                .trim()
-                .toLowerCase();
+            const email =
+                normalizeEmail(
+                    req.body?.email
+                );
 
-            const password = String(
-                req.body.password || ""
-            );
+            const password =
+                String(
+                    req.body?.password ||
+                        ""
+                );
 
             if (!email || !password) {
-                return res.status(400).json({
-                    error:
-                        "اكتب البريد الإلكتروني وكلمة السر."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب البريد وكلمة السر."
+                    });
             }
 
             const user =
@@ -414,10 +423,12 @@ app.post(
                 `).get(email);
 
             if (!user) {
-                return res.status(401).json({
-                    error:
-                        "البريد الإلكتروني أو كلمة السر غير صحيحة."
-                });
+                return res
+                    .status(401)
+                    .json({
+                        error:
+                            "البريد الإلكتروني أو كلمة السر غير صحيحة."
+                    });
             }
 
             const validPassword =
@@ -427,112 +438,65 @@ app.post(
                 );
 
             if (!validPassword) {
-                return res.status(401).json({
-                    error:
-                        "البريد الإلكتروني أو كلمة السر غير صحيحة."
-                });
+                return res
+                    .status(401)
+                    .json({
+                        error:
+                            "البريد الإلكتروني أو كلمة السر غير صحيحة."
+                    });
             }
 
-            req.session.regenerate(
-                function (sessionError) {
-                    if (sessionError) {
-                        console.error(
-                            "SESSION REGENERATE ERROR:",
-                            sessionError
-                        );
-
-                        return res.status(500).json({
-                            error:
-                                "تعذر إنشاء جلسة الدخول."
-                        });
-                    }
-
-                    req.session.userId =
-                        user.id;
-
-                    req.session.userName =
-                        user.name;
-
-                    req.session.authenticated =
-                        true;
-
-                    saveSession(req, res, {
-                        success: true,
-
-                        user: {
-                            id: user.id,
-                            name: user.name,
-                            email: user.email
-                        }
-                    });
-                }
+            await regenerateSession(
+                req
             );
+
+            req.session.userId =
+                user.id;
+
+            req.session.userName =
+                user.name;
+
+            req.session.authenticated =
+                true;
+
+            await saveSession(req);
+
+            return res.json({
+                success: true,
+
+                user: {
+                    id: user.id,
+
+                    name: user.name,
+
+                    email: user.email
+                }
+            });
         } catch (error) {
             console.error(
                 "LOGIN ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "حصل خطأ أثناء تسجيل الدخول."
-            });
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تسجيل الدخول."
+                });
         }
     }
 );
 
-/* =========================================================
-   LOGOUT
-========================================================= */
-
-app.post(
-    "/api/auth/logout",
-    function (req, res) {
-        req.session.destroy(
-            function (error) {
-                if (error) {
-                    console.error(
-                        "LOGOUT ERROR:",
-                        error
-                    );
-
-                    return res.status(500).json({
-                        error:
-                            "تعذر تسجيل الخروج."
-                    });
-                }
-
-                res.clearCookie(
-                    "physicsai.sid",
-                    {
-                        httpOnly: true,
-                        sameSite: "lax",
-                        secure: "auto",
-                        path: "/"
-                    }
-                );
-
-                res.json({
-                    success: true
-                });
-            }
-        );
-    }
-);
-
-/* =========================================================
-   CURRENT USER
-========================================================= */
-
 app.get(
     "/api/auth/me",
-    function (req, res) {
+    (req, res) => {
         if (
             !req.session ||
             !req.session.userId
         ) {
             return res.json({
-                loggedIn: false
+                authenticated: false
             });
         }
 
@@ -541,7 +505,8 @@ app.get(
                 SELECT
                     id,
                     name,
-                    email
+                    email,
+                    created_at
                 FROM users
                 WHERE id = ?
             `).get(
@@ -549,85 +514,71 @@ app.get(
             );
 
         if (!user) {
-            req.session.destroy(
-                function () {}
-            );
-
             return res.json({
-                loggedIn: false
+                authenticated: false
             });
         }
 
-        res.json({
-            loggedIn: true,
+        return res.json({
+            authenticated: true,
+
             user
         });
     }
 );
 
-/* =========================================================
-   CREATE CONVERSATION
-========================================================= */
-
 app.post(
-    "/api/conversations",
-    requireLogin,
-    function (req, res) {
+    "/api/auth/logout",
+    async (req, res) => {
         try {
-            const title = String(
-                req.body.title ||
-                    "محادثة جديدة"
-            )
-                .trim()
-                .slice(0, 120);
-
-            const finalTitle =
-                title || "محادثة جديدة";
-
-            const result =
-                db.prepare(`
-                    INSERT INTO conversations
-                    (user_id, title)
-                    VALUES (?, ?)
-                `).run(
-                    req.session.userId,
-                    finalTitle
-                );
-
-            res.json({
-                success: true,
-
-                conversation: {
-                    id:
-                        Number(
-                            result.lastInsertRowid
-                        ),
-                    title:
-                        finalTitle
+            await new Promise(
+                (resolve) => {
+                    req.session.destroy(
+                        () => resolve()
+                    );
                 }
+            );
+
+            res.clearCookie(
+                "physicsai.sid",
+                {
+                    httpOnly: true,
+
+                    sameSite: "lax",
+
+                    secure: "auto",
+
+                    path: "/"
+                }
+            );
+
+            return res.json({
+                success: true
             });
         } catch (error) {
             console.error(
-                "CREATE CONVERSATION ERROR:",
+                "LOGOUT ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر إنشاء المحادثة."
-            });
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تسجيل الخروج."
+                });
         }
     }
 );
 
 /* =========================================================
-   GET CONVERSATIONS
+   CONVERSATIONS
 ========================================================= */
 
 app.get(
     "/api/conversations",
-    requireLogin,
-    function (req, res) {
+    requireAuth,
+    (req, res) => {
         try {
             const conversations =
                 db.prepare(`
@@ -643,7 +594,7 @@ app.get(
                     req.session.userId
                 );
 
-            res.json({
+            return res.json({
                 conversations
             });
         } catch (error) {
@@ -652,42 +603,107 @@ app.get(
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر تحميل المحادثات."
-            });
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تحميل المحادثات."
+                });
         }
     }
 );
 
-/* =========================================================
-   GET ONE CONVERSATION
-========================================================= */
+app.post(
+    "/api/conversations",
+    requireAuth,
+    (req, res) => {
+        try {
+            const title =
+                cleanString(
+                    req.body?.title,
+                    200
+                ) ||
+                "دردشة جديدة";
+
+            const createdAt =
+                nowISO();
+
+            const result =
+                db.prepare(`
+                    INSERT INTO conversations (
+                        user_id,
+                        title,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?)
+                `).run(
+                    req.session.userId,
+                    title,
+                    createdAt,
+                    createdAt
+                );
+
+            const conversation =
+                db.prepare(`
+                    SELECT
+                        id,
+                        title,
+                        created_at,
+                        updated_at
+                    FROM conversations
+                    WHERE id = ?
+                `).get(
+                    result.lastInsertRowid
+                );
+
+            return res.json({
+                conversation
+            });
+        } catch (error) {
+            console.error(
+                "CREATE CONVERSATION ERROR:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء إنشاء المحادثة."
+                });
+        }
+    }
+);
 
 app.get(
     "/api/conversations/:id",
-    requireLogin,
-    function (req, res) {
+    requireAuth,
+    (req, res) => {
         try {
             const conversationId =
-                Number(
-                    req.params.id
-                );
+                Number(req.params.id);
 
             if (
                 !Number.isInteger(
                     conversationId
                 )
             ) {
-                return res.status(400).json({
-                    error:
-                        "رقم المحادثة غير صحيح."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "رقم المحادثة غير صحيح."
+                    });
             }
 
             const conversation =
                 db.prepare(`
-                    SELECT *
+                    SELECT
+                        id,
+                        title,
+                        created_at,
+                        updated_at
                     FROM conversations
                     WHERE id = ?
                     AND user_id = ?
@@ -697,10 +713,12 @@ app.get(
                 );
 
             if (!conversation) {
-                return res.status(404).json({
-                    error:
-                        "المحادثة غير موجودة."
-                });
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "المحادثة غير موجودة."
+                    });
             }
 
             const messages =
@@ -718,8 +736,9 @@ app.get(
                     conversationId
                 );
 
-            res.json({
+            return res.json({
                 conversation,
+
                 messages
             });
         } catch (error) {
@@ -728,105 +747,23 @@ app.get(
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر تحميل المحادثة."
-            });
-        }
-    }
-);
-
-/* =========================================================
-   DELETE CONVERSATION
-========================================================= */
-
-app.delete(
-    "/api/conversations/:id",
-    requireLogin,
-    function (req, res) {
-        try {
-            const conversationId =
-                Number(
-                    req.params.id
-                );
-
-            const result =
-                db.prepare(`
-                    DELETE FROM conversations
-                    WHERE id = ?
-                    AND user_id = ?
-                `).run(
-                    conversationId,
-                    req.session.userId
-                );
-
-            if (!result.changes) {
-                return res.status(404).json({
+            return res
+                .status(500)
+                .json({
                     error:
-                        "المحادثة غير موجودة."
+                        "حصل خطأ أثناء تحميل المحادثة."
                 });
-            }
-
-            res.json({
-                success: true
-            });
-        } catch (error) {
-            console.error(
-                "DELETE CONVERSATION ERROR:",
-                error
-            );
-
-            res.status(500).json({
-                error:
-                    "تعذر حذف المحادثة."
-            });
         }
     }
 );
 
-/* =========================================================
-   SAVE MESSAGE
-========================================================= */
-
-app.post(
+app.get(
     "/api/conversations/:id/messages",
-    requireLogin,
-    function (req, res) {
+    requireAuth,
+    (req, res) => {
         try {
             const conversationId =
-                Number(
-                    req.params.id
-                );
-
-            const role =
-                req.body.role ===
-                "assistant"
-                    ? "assistant"
-                    : "user";
-
-            const content =
-                String(
-                    req.body.content || ""
-                ).trim();
-
-            let image =
-                req.body.image ||
-                null;
-
-            if (
-                typeof image === "string" &&
-                image.length >
-                    8_000_000
-            ) {
-                image = null;
-            }
-
-            if (!content) {
-                return res.status(400).json({
-                    error:
-                        "الرسالة فارغة."
-                });
-            }
+                Number(req.params.id);
 
             const conversation =
                 db.prepare(`
@@ -840,965 +777,1145 @@ app.post(
                 );
 
             if (!conversation) {
-                return res.status(404).json({
-                    error:
-                        "المحادثة غير موجودة."
-                });
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "المحادثة غير موجودة."
+                    });
             }
 
-            const result =
+            const messages =
                 db.prepare(`
-                    INSERT INTO messages
-                    (conversation_id, role, content, image)
-                    VALUES (?, ?, ?, ?)
-                `).run(
-                    conversationId,
-                    role,
-                    content,
-                    image
+                    SELECT
+                        id,
+                        role,
+                        content,
+                        image,
+                        created_at
+                    FROM messages
+                    WHERE conversation_id = ?
+                    ORDER BY id ASC
+                `).all(
+                    conversationId
                 );
 
-            db.prepare(`
-                UPDATE conversations
-                SET updated_at =
-                    CURRENT_TIMESTAMP
-                WHERE id = ?
-            `).run(
-                conversationId
-            );
-
-            res.json({
-                success: true,
-
-                message: {
-                    id:
-                        Number(
-                            result.lastInsertRowid
-                        ),
-                    role,
-                    content,
-                    image
-                }
+            return res.json({
+                messages
             });
         } catch (error) {
             console.error(
-                "SAVE MESSAGE ERROR:",
+                "GET MESSAGES ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر حفظ الرسالة."
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تحميل الرسائل."
+                });
+        }
+    }
+);
+
+app.delete(
+    "/api/conversations/:id",
+    requireAuth,
+    (req, res) => {
+        try {
+            const conversationId =
+                Number(req.params.id);
+
+            const result =
+                db.prepare(`
+                    DELETE FROM conversations
+                    WHERE id = ?
+                    AND user_id = ?
+                `).run(
+                    conversationId,
+                    req.session.userId
+                );
+
+            if (
+                result.changes === 0
+            ) {
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "المحادثة غير موجودة."
+                    });
+            }
+
+            return res.json({
+                success: true
             });
+        } catch (error) {
+            console.error(
+                "DELETE CONVERSATION ERROR:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء حذف المحادثة."
+                });
         }
     }
 );
 
 /* =========================================================
-   PHYSICS DATA
+   PHYSICS CONSTANTS
 ========================================================= */
 
 const PHYSICS_CONSTANTS = {
-    g: 9.80665,
-    c: 299792458,
-    h: 6.62607015e-34,
-    hbar: 1.054571817e-34,
-    e: 1.602176634e-19,
-    me: 9.1093837139e-31,
-    mp: 1.67262192595e-27,
-    eps0: 8.8541878128e-12,
-    mu0: 1.25663706212e-6,
-    G: 6.67430e-11,
-    kB: 1.380649e-23,
-    R: 8.31446261815324,
-    NA: 6.02214076e23
+    g: "9.81 m/s²",
+
+    c: "3 × 10^8 m/s",
+
+    h: "6.626 × 10^-34 J·s",
+
+    G: "6.674 × 10^-11 N·m²/kg²",
+
+    e:
+        "1.602 × 10^-19 C",
+
+    me:
+        "9.109 × 10^-31 kg",
+
+    mp:
+        "1.673 × 10^-27 kg",
+
+    R:
+        "8.314 J/(mol·K)",
+
+    k:
+        "1.381 × 10^-23 J/K",
+
+    epsilon0:
+        "8.854 × 10^-12 F/m",
+
+    mu0:
+        "1.257 × 10^-6 H/m",
+
+    NA:
+        "6.022 × 10^23 mol^-1"
 };
 
-const DOMAIN_RULES = [
-    {
-        name: "الميكانيكا والحركة",
-
-        keys: [
-            "سرعة",
-            "تسارع",
-            "عجلة",
-            "إزاحة",
-            "مسافة",
-            "زمن",
-            "قوة",
-            "نيوتن",
-            "احتكاك",
-            "مستوى مائل",
-            "بكرة",
-            "كتلة",
-            "زخم",
-            "تصادم",
-            "طاقة حركية",
-            "شغل",
-            "قدرة"
-        ]
-    },
-
-    {
-        name: "الدوران والاتزان",
-
-        keys: [
-            "عزم",
-            "عزوم",
-            "عزم القصور",
-            "قصور ذاتي",
-            "زاوية",
-            "سرعة زاوية",
-            "تسارع زاوي",
-            "اتزان"
-        ]
-    },
-
-    {
-        name: "الجاذبية والفلك",
-
-        keys: [
-            "جاذبية",
-            "مدار",
-            "كوكب",
-            "قمر",
-            "قانون كبلر",
-            "سرعة الإفلات",
-            "كتلة الأرض"
-        ]
-    },
-
-    {
-        name: "الموائع",
-
-        keys: [
-            "ضغط",
-            "كثافة",
-            "لزوجة",
-            "طفو",
-            "برنولي",
-            "استمرارية",
-            "موائع",
-            "سريان"
-        ]
-    },
-
-    {
-        name:
-            "الحرارة والديناميكا الحرارية",
-
-        keys: [
-            "حرارة",
-            "درجة الحرارة",
-            "حراري",
-            "قانون الغاز",
-            "غاز مثالي",
-            "إنتروبيا",
-            "أنتروبي",
-            "إنثالبي",
-            "حرارة نوعية"
-        ]
-    },
-
-    {
-        name: "الكهربية والدوائر",
-
-        keys: [
-            "تيار",
-            "جهد",
-            "مقاومة",
-            "مقاومات",
-            "قانون أوم",
-            "كيرتشوف",
-            "دائرة",
-            "مكثف",
-            "حث ذاتي",
-            "قدرة كهربائية"
-        ]
-    },
-
-    {
-        name: "المغناطيسية والحث",
-
-        keys: [
-            "مجال مغناطيسي",
-            "مغناطيسي",
-            "فيض مغناطيسي",
-            "قوة لورنتز",
-            "الحث",
-            "فاراداي",
-            "لينز",
-            "ملف",
-            "سلك"
-        ]
-    },
-
-    {
-        name: "الموجات والاهتزازات",
-
-        keys: [
-            "موجة",
-            "تردد",
-            "طول موجي",
-            "سعة",
-            "طور",
-            "رنين",
-            "اهتزاز",
-            "موجة واقفة"
-        ]
-    },
-
-    {
-        name: "البصريات",
-
-        keys: [
-            "عدسة",
-            "مرآة",
-            "بؤرة",
-            "انكسار",
-            "انعكاس",
-            "زاوية حرجة",
-            "منشور",
-            "بصري"
-        ]
-    },
-
-    {
-        name:
-            "الفيزياء الحديثة والكم",
-
-        keys: [
-            "فوتون",
-            "كم",
-            "بلانك",
-            "دالة موجية",
-            "شرودنجر",
-            "عدم اليقين",
-            "ازدواجية",
-            "تأثير كهروضوئي",
-            "نسبية",
-            "لورنتز"
-        ]
-    },
-
-    {
-        name:
-            "الفيزياء النووية والجسيمات",
-
-        keys: [
-            "نواة",
-            "نووية",
-            "اضمحلال",
-            "نشاط إشعاعي",
-            "نصف العمر",
-            "كتلة ذرية",
-            "طاقة ربط",
-            "نيوترون",
-            "بروتون"
-        ]
-    }
-];
-
 /* =========================================================
-   UNITS
+   UNIT FACTORS
 ========================================================= */
 
 const UNIT_FACTORS = {
-    mm: 1e-3,
-    cm: 1e-2,
-    km: 1e3,
-    m: 1,
+    length: {
+        m: 1,
+        cm: 0.01,
+        mm: 0.001,
+        km: 1000,
+        inch: 0.0254,
+        ft: 0.3048
+    },
 
-    mg: 1e-6,
-    g: 1e-3,
-    kg: 1,
+    mass: {
+        kg: 1,
+        g: 0.001,
+        mg: 0.000001,
+        ton: 1000
+    },
 
-    N: 1,
-    kN: 1e3,
-    mN: 1e-3,
+    time: {
+        s: 1,
+        ms: 0.001,
+        min: 60,
+        h: 3600
+    },
 
-    J: 1,
-    kJ: 1e3,
+    speed: {
+        "m/s": 1,
+        "km/h":
+            1000 / 3600,
+        "cm/s": 0.01
+    },
 
-    W: 1,
-    kW: 1e3,
+    force: {
+        N: 1,
+        kN: 1000
+    },
 
-    Pa: 1,
-    kPa: 1e3,
-    MPa: 1e6,
+    energy: {
+        J: 1,
+        kJ: 1000,
+        MJ: 1000000,
+        cal: 4.184,
+        kcal: 4184,
+        eV:
+            1.602176634e-19
+    },
 
-    V: 1,
-    mV: 1e-3,
+    power: {
+        W: 1,
+        kW: 1000,
+        MW: 1000000
+    },
 
-    A: 1,
-    mA: 1e-3,
-    uA: 1e-6,
+    pressure: {
+        Pa: 1,
+        kPa: 1000,
+        MPa: 1000000,
+        bar: 100000,
+        atm:
+            101325
+    },
 
-    C: 1,
-    mC: 1e-3,
+    charge: {
+        C: 1,
+        mC: 0.001,
+        uC: 0.000001,
+        nC: 0.000000001
+    },
 
-    ohm: 1,
+    voltage: {
+        V: 1,
+        mV: 0.001,
+        kV: 1000
+    },
 
-    Hz: 1,
-    kHz: 1e3,
-    MHz: 1e6,
+    current: {
+        A: 1,
+        mA: 0.001,
+        uA: 0.000001
+    },
 
-    s: 1,
-    ms: 1e-3,
-    min: 60,
-    h: 3600,
-
-    K: 1,
-
-    mol: 1
+    frequency: {
+        Hz: 1,
+        kHz: 1000,
+        MHz: 1000000,
+        GHz: 1000000000
+    }
 };
+
+/* =========================================================
+   UNIT ALIASES
+========================================================= */
 
 const UNIT_ALIASES = {
-    "م": "m",
-    "سم": "cm",
-    "مم": "mm",
-    "كم": "km",
-    "جرام": "g",
-    "غرام": "g",
-    "كجم": "kg",
-    "كيلوجرام": "kg",
-    "نيوتن": "N",
-    "جول": "J",
-    "وات": "W",
-    "باسكال": "Pa",
-    "فولت": "V",
-    "أمبير": "A",
-    "امبير": "A",
-    "ث": "s",
-    "ثانية": "s",
-    "دقيقة": "min",
-    "ساعة": "h"
+    متر: "m",
+
+    متر_مربع: "m²",
+
+    متر_مكعب: "m³",
+
+    سنتيمتر: "cm",
+
+    سنتيمتر: "cm",
+
+    مليمتر: "mm",
+
+    كيلومتر: "km",
+
+    جرام: "g",
+
+    غرام: "g",
+
+    كيلوجرام: "kg",
+
+    كيلوغرام: "kg",
+
+    مليجرام: "mg",
+
+    ملليجرام: "mg",
+
+    ثانية: "s",
+
+    ثواني: "s",
+
+    دقيقة: "min",
+
+    دقائق: "min",
+
+    ساعة: "h",
+
+    ساعات: "h",
+
+    نيوتن: "N",
+
+    جول: "J",
+
+    كيلوجول: "kJ",
+
+    وات: "W",
+
+    واط: "W",
+
+    كيلووات: "kW",
+
+    باسكال: "Pa",
+
+    كيلوباسكال: "kPa",
+
+    أمبير: "A",
+
+    امبير: "A",
+
+    ملي_أمبير: "mA",
+
+    فولت: "V",
+
+    ملي_فولت: "mV",
+
+    كولوم: "C",
+
+    ملي_كولوم: "mC",
+
+    ميكروكولوم: "uC",
+
+    هرتز: "Hz",
+
+    كيلوهرتز: "kHz",
+
+    ميجاهرتز: "MHz",
+
+    جيجاهرتز: "GHz",
+
+    متر_لكل_ثانية: "m/s",
+
+    كيلومتر_لكل_ساعة: "km/h",
+
+    درجة_مئوية: "C",
+
+    سيلسيوس: "C",
+
+    كلفن: "K"
 };
 
 /* =========================================================
-   NORMALIZE
+   DOMAIN RULES
 ========================================================= */
 
-function normalizeArabicUnits(text) {
-    let output = String(text || "");
+const DOMAIN_RULES = {
+    mechanics: [
+        "قوة",
+        "عجلة",
+        "تسارع",
+        "سرعة",
+        "إزاحة",
+        "مسافة",
+        "زمن",
+        "كتلة",
+        "نيوتن",
+        "احتكاك",
+        "زخم",
+        "كمية حركة",
+        "طاقة حركية",
+        "طاقة وضع",
+        "شغل",
+        "قدرة",
+        "سقوط حر",
+        "حركة"
+    ],
 
-    for (
-        const [arabic, english]
-        of Object.entries(
-            UNIT_ALIASES
-        )
-    ) {
-        output =
-            output.replaceAll(
-                arabic,
-                english
-            );
-    }
+    electricity: [
+        "تيار",
+        "جهد",
+        "مقاومة",
+        "كهرباء",
+        "أوم",
+        "كولوم",
+        "شحنة",
+        "دائرة",
+        "بطارية",
+        "مكثف",
+        "حث",
+        "فيض",
+        "مجال كهربائي"
+    ],
 
-    return output;
-}
+    waves: [
+        "موجة",
+        "تردد",
+        "طول موجي",
+        "سعة",
+        "اهتزاز",
+        "صوت",
+        "سرعة الموجة",
+        "تداخل",
+        "حيود",
+        "انعكاس"
+    ],
+
+    optics: [
+        "عدسة",
+        "مرآة",
+        "بؤرة",
+        "بؤري",
+        "تكبير",
+        "انكسار",
+        "انعكاس الضوء",
+        "ضوء",
+        "شعاع",
+        "منشور"
+    ],
+
+    thermodynamics: [
+        "حرارة",
+        "درجة حرارة",
+        "كلفن",
+        "غاز",
+        "ضغط",
+        "حجم",
+        "تمدد",
+        "انكماش",
+        "ديناميكا حرارية",
+        "حراري"
+    ],
+
+    modern: [
+        "كم",
+        "كمية حركة",
+        "فوتون",
+        "بلانك",
+        "نسبية",
+        "كتلة سكون",
+        "طاقة سكون",
+        "إلكترون",
+        "ذرة",
+        "نواة",
+        "نصف عمر",
+        "نشاط إشعاعي",
+        "طيف"
+    ],
+
+    fluids: [
+        "سائل",
+        "لزوجة",
+        "ضغط السائل",
+        "كثافة",
+        "طفو",
+        "أرخميدس",
+        "برنولي",
+        "مائع",
+        "معدل السريان"
+    ]
+};
 
 /* =========================================================
-   EXTRACT NUMBERS
+   NORMALIZE ARABIC UNITS
 ========================================================= */
 
-function extractQuantities(text) {
-    const source =
-        normalizeArabicUnits(text)
-            .replace(
-                /[٫٬]/g,
-                "."
-            )
-            .replace(
-                /،/g,
-                ","
-            );
+function normalizeArabicUnits(
+    text
+) {
+    let result =
+        String(text || "");
 
-    const numberPattern =
-        "(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?";
+    const replacements = [
+        [
+            /كيلومتر\s*\/\s*ساعة/gi,
+            "km/h"
+        ],
 
-    const unitPattern =
-        Object.keys(UNIT_FACTORS)
-            .sort(
-                (a, b) =>
-                    b.length - a.length
-            )
-            .map(
-                x =>
-                    x.replace(
-                        /[.*+?^${}()|[\]\\]/g,
-                        "\\$&"
-                    )
-            )
-            .join("|");
+        [
+            /كيلو\s*متر\s*\/\s*ساعة/gi,
+            "km/h"
+        ],
 
-    const regex =
-        new RegExp(
-            `(${numberPattern})\\s*(${unitPattern})(?:\\b|$)`,
-            "giu"
-        );
+        [
+            /متر\s*\/\s*ثانية/gi,
+            "m/s"
+        ],
 
-    const result = [];
+        [
+            /متر\s*في\s*الثانية/gi,
+            "m/s"
+        ],
 
-    let match;
+        [
+            /متر\s*لكل\s*ثانية/gi,
+            "m/s"
+        ],
 
-    while (
-        (match = regex.exec(source)) &&
-        result.length < 80
+        [
+            /كيلوجرام/gi,
+            "kg"
+        ],
+
+        [
+            /كيلوغرام/gi,
+            "kg"
+        ],
+
+        [
+            /جرام/gi,
+            "g"
+        ],
+
+        [
+            /غرام/gi,
+            "g"
+        ],
+
+        [
+            /سنتيمتر/gi,
+            "cm"
+        ],
+
+        [
+            /مليمتر/gi,
+            "mm"
+        ],
+
+        [
+            /كيلومتر/gi,
+            "km"
+        ],
+
+        [
+            /متر/gi,
+            "m"
+        ],
+
+        [
+            /ثانية/gi,
+            "s"
+        ],
+
+        [
+            /ثواني/gi,
+            "s"
+        ],
+
+        [
+            /دقيقة/gi,
+            "min"
+        ],
+
+        [
+            /دقائق/gi,
+            "min"
+        ],
+
+        [
+            /ساعة/gi,
+            "h"
+        ],
+
+        [
+            /ساعات/gi,
+            "h"
+        ],
+
+        [
+            /نيوتن/gi,
+            "N"
+        ],
+
+        [
+            /جول/gi,
+            "J"
+        ],
+
+        [
+            /وات/gi,
+            "W"
+        ],
+
+        [
+            /واط/gi,
+            "W"
+        ],
+
+        [
+            /أمبير/gi,
+            "A"
+        ],
+
+        [
+            /امبير/gi,
+            "A"
+        ],
+
+        [
+            /فولت/gi,
+            "V"
+        ],
+
+        [
+            /كولوم/gi,
+            "C"
+        ],
+
+        [
+            /هرتز/gi,
+            "Hz"
+        ]
+    ];
+
+    for (
+        const [pattern, replacement]
+        of replacements
     ) {
-        const value =
-            Number(
-                String(
-                    match[1]
-                ).replace(
-                    /,/g,
-                    "."
-                )
+        result =
+            result.replace(
+                pattern,
+                replacement
             );
-
-        if (!Number.isFinite(value)) {
-            continue;
-        }
-
-        const unit =
-            match[2];
-
-        const factor =
-            UNIT_FACTORS[unit] ?? 1;
-
-        result.push({
-            raw: match[0],
-
-            value,
-
-            unit,
-
-            siValue:
-                value *
-                factor
-        });
     }
 
     return result;
 }
 
 /* =========================================================
-   DETECT PHYSICS DOMAIN
+   NORMALIZE NUMBER TOKENS
 ========================================================= */
 
-function detectDomains(text) {
-    const source =
+function normalizeNumberToken(
+    value
+) {
+    if (
+        value === null ||
+        value === undefined
+    ) {
+        return null;
+    }
+
+    let text =
+        String(value)
+            .trim()
+            .replace(/،/g, ".")
+            .replace(/٫/g, ".")
+            .replace(/,/g, "");
+
+    const arabicDigits = {
+        "٠": "0",
+        "١": "1",
+        "٢": "2",
+        "٣": "3",
+        "٤": "4",
+        "٥": "5",
+        "٦": "6",
+        "٧": "7",
+        "٨": "8",
+        "٩": "9"
+    };
+
+    text =
+        text.replace(
+            /[٠-٩]/g,
+            (digit) =>
+                arabicDigits[digit]
+        );
+
+    const result =
+        Number(text);
+
+    return Number.isFinite(result)
+        ? result
+        : null;
+}
+
+/* =========================================================
+   EXTRACT QUANTITIES
+========================================================= */
+
+function extractQuantities(
+    text
+) {
+    const normalized =
         normalizeArabicUnits(
             text
-        ).toLowerCase();
+        );
 
-    const scores = [];
+    const quantities = [];
 
-    for (
-        const rule
-        of DOMAIN_RULES
+    const regex =
+        /(-?\d+(?:\.\d+)?)\s*([a-zA-Z]+(?:\/[a-zA-Z]+)?|m\/s|km\/h|N|J|W|Pa|V|A|C|Hz)?/g;
+
+    let match;
+
+    while (
+        (match =
+            regex.exec(
+                normalized
+            )) !== null
     ) {
-        let score = 0;
+        const value =
+            normalizeNumberToken(
+                match[1]
+            );
 
-        for (
-            const key
-            of rule.keys
+        if (
+            value === null
         ) {
-            if (
-                source.includes(
-                    normalizeArabicUnits(
-                        key
-                    ).toLowerCase()
-                )
-            ) {
-                score +=
-                    key.length >= 8
-                        ? 2
-                        : 1;
-            }
+            continue;
         }
 
-        if (score > 0) {
-            scores.push({
-                name: rule.name,
-                score
+        quantities.push({
+            value,
+
+            unit:
+                match[2] ||
+                null
+        });
+    }
+
+    return quantities;
+}
+
+/* =========================================================
+   DETECT DOMAINS
+========================================================= */
+
+function detectDomains(
+    text
+) {
+    const normalized =
+        String(text || "")
+            .toLowerCase();
+
+    const found = [];
+
+    for (
+        const [
+            domain,
+            keywords
+        ] of Object.entries(
+            DOMAIN_RULES
+        )
+    ) {
+        const matches =
+            keywords.filter(
+                (keyword) =>
+                    normalized.includes(
+                        keyword.toLowerCase()
+                    )
+            );
+
+        if (
+            matches.length > 0
+        ) {
+            found.push({
+                domain,
+
+                matches
             });
         }
     }
 
-    return scores
-        .sort(
-            (a, b) =>
-                b.score -
-                a.score
-        )
-        .slice(0, 5);
+    return found;
 }
 
 /* =========================================================
-   COMPLEXITY
+   COMPLEXITY SCORE
 ========================================================= */
 
 function complexityScore(
-    text,
-    quantities,
-    domains,
-    hasImage
+    text
 ) {
-    const source =
+    const input =
         String(text || "");
 
     let score = 0;
 
-    if (
-        quantities.length >= 4
-    ) {
-        score += 2;
-    }
-
-    if (
-        quantities.length >= 8
-    ) {
-        score += 2;
-    }
-
-    if (
-        domains.length >= 2
-    ) {
-        score += 2;
-    }
-
-    if (hasImage) {
-        score += 3;
-    }
-
-    if (
-        (source.match(/[=]/g) || [])
-            .length >= 2
-    ) {
-        score += 2;
-    }
-
-    if (
-        (
-            source.match(
-                /[+\-*/]/g
-            ) || []
-        ).length >= 6
-    ) {
-        score += 1;
-    }
-
-    if (
-        /نظام معادلات|معادلات|تفاضل|تكامل|مصفوف|متجه|اشتقاق|أثبت|برهن|أقصى|أدنى|احتمال|دالة/
-            .test(source)
-    ) {
-        score += 3;
-    }
-
-    if (
-        /ثم|بعد ذلك|على التوالي|على التوازي|معًا|في نفس الوقت|يتصل|متصل/
-            .test(source)
-    ) {
-        score += 2;
-    }
-
-    if (
-        /تصادم|بكرة|مستويين|دوائر|كيرتشوف|ماكسويل|نسبي|كمومي/
-            .test(source)
-    ) {
-        score += 2;
-    }
-
-    return Math.min(
-        score,
-        15
-    );
-}
-
-/* =========================================================
-   PRECHECK
-========================================================= */
-
-function buildPreflight(
-    text,
-    image
-) {
     const quantities =
         extractQuantities(
-            text
+            input
         );
 
     const domains =
         detectDomains(
-            text
+            input
         );
 
-    const complexity =
+    score +=
+        Math.min(
+            quantities.length * 2,
+            10
+        );
+
+    score +=
+        Math.min(
+            domains.length * 3,
+            12
+        );
+
+    const complexWords = [
+        "أثبت",
+        "برهن",
+        "اشتق",
+        "اشتقاق",
+        "قارن",
+        "احسب",
+        "استنتج",
+        "معادلة",
+        "معادلات",
+        "دائرة",
+        "دوائر",
+        "عدة",
+        "مرحلة",
+        "خطوات",
+        "بيانات",
+        "جدول",
+        "رسم",
+        "منحنى",
+        "طاقة",
+        "زخم",
+        "مجال",
+        "جهد",
+        "تيار",
+        "مقاومة",
+        "موجة"
+    ];
+
+    for (
+        const word
+        of complexWords
+    ) {
+        if (
+            input.includes(word)
+        ) {
+            score += 1;
+        }
+    }
+
+    if (
+        input.length > 500
+    ) {
+        score += 3;
+    }
+
+    if (
+        input.length > 1000
+    ) {
+        score += 4;
+    }
+
+    return Math.min(
+        score,
+        30
+    );
+}
+
+/* =========================================================
+   PREFLIGHT
+========================================================= */
+
+function buildPreflight(
+    question
+) {
+    const quantities =
+        extractQuantities(
+            question
+        );
+
+    const domains =
+        detectDomains(
+            question
+        );
+
+    const score =
         complexityScore(
-            text,
-            quantities,
-            domains,
-            Boolean(image)
-        );
-
-    const values =
-        quantities.map(
-            item =>
-                `${item.raw} = ${item.siValue} ${item.unit}`
+            question
         );
 
     return {
+        score,
+
         quantities,
 
         domains,
 
-        complexity,
-
-        promptBlock: `
-تحليل أولي للسؤال:
-
-الفروع المحتملة:
-${
-    domains.length
-        ? domains
-              .map(
-                  x =>
-                      x.name
-              )
-              .join("، ")
-        : "غير محدد"
-}
-
-درجة التعقيد:
-${complexity}
-
-القيم الموجودة في السؤال:
-${
-    values.length
-        ? values.join("\n")
-        : "لا توجد قيم رقمية واضحة"
-}
-
-لا تعتبر هذا التحليل حقيقة نهائية.
-راجع السؤال نفسه قبل استخدام أي قيمة.
-`
+        normalized:
+            normalizeArabicUnits(
+                question
+            )
     };
+}
+
+/* =========================================================
+   PHYSICS CONSTANTS TEXT
+========================================================= */
+
+function getPhysicsConstantsText() {
+    return Object.entries(
+        PHYSICS_CONSTANTS
+    )
+        .map(
+            ([key, value]) =>
+                `${key} = ${value}`
+        )
+        .join("\n");
 }
 
 /* =========================================================
    QUESTION INTENT
 ========================================================= */
 
-function detectQuestionIntent(text) {
-    const source =
-        String(
-            text || ""
-        ).trim();
+function detectQuestionIntent(
+    text
+) {
+    const input =
+        String(text || "")
+            .trim();
 
-    const solve =
-        /حل|أوجد|احسب|استنتج|استخرج|جد|حل المسألة|هات الحل|عايز الحل|اعطني الحل|أعطني الحل|احسب قيمة|أوجد قيمة/
-            .test(source);
+    const lower =
+        input.toLowerCase();
+
+    const explainWords = [
+        "اشرح",
+        "شرح",
+        "وضح",
+        "توضيح",
+        "فهمني",
+        "مش فاهم",
+        "مش فاهمة",
+        "ليه",
+        "لماذا",
+        "ازاي",
+        "كيف"
+    ];
+
+    const solveWords = [
+        "حل",
+        "احسب",
+        "أوجد",
+        "هات الناتج",
+        "الناتج",
+        "الإجابة",
+        "الاجابة"
+    ];
 
     const explain =
-        /اشرح|فهمني|وضح|وضّح|ليه|لماذا|كيف|عايز أفهم|مش فاهم|فهمني الفكرة|اشرحلي|فسر|فسّر/
-            .test(source);
+        explainWords.some(
+            (word) =>
+                input.includes(word)
+        );
 
-    if (solve) {
-        return "solution";
+    const solve =
+        solveWords.some(
+            (word) =>
+                input.includes(word)
+        );
+
+    if (
+        explain
+    ) {
+        return "explain";
     }
 
-    if (explain) {
-        return "explanation";
+    if (
+        solve
+    ) {
+        return "solve";
     }
 
     return "normal";
 }
 
 /* =========================================================
-   SIMPLE RESPONSE STYLE
+   SIMPLE STYLE
 ========================================================= */
 
 const SIMPLE_STYLE = `
-اكتب بالعربية المصرية السهلة.
+اكتب إجاباتك بالعربية المصرية البسيطة المناسبة لطالب الثانوية العامة.
 
-خليك واضح وطبيعي.
+ممنوع استخدام الإيموجي.
 
-ممنوع الإيموجي.
+ممنوع استخدام LaTeX.
 
-ممنوع الرموز الغريبة.
+ممنوع استخدام رموز رياضية معقدة.
 
-ممنوع LaTeX.
+ممنوع كتابة الضرب بالرمز * أو ×.
 
-ممنوع التنسيق الرياضي المعقد.
+اكتب الضرب بكلمة "في".
 
-ممنوع كتابة معادلات بالشكل البرمجي.
+اكتب القسمة بكلمة "على".
 
-ممنوع استخدام:
-*
-×
-÷
-^2
-^3
-√
-π
-θ
-ω
-λ
-وغيرها من الرموز التي ممكن تربك الطالب.
+اكتب الأسس بالكلمات.
+مثلاً:
+v تربيع
+a تربيع
+r تربيع
 
-بدل ذلك استخدم كلام بسيط.
+بدلاً من:
+v^2
+a^2
+r^2
 
-مثال:
-بدل v^2 اكتب "v تربيع".
+استخدم علامات ترقيم عادية.
 
-بدل √x اكتب "الجذر التربيعي لـ x".
+خلي الجمل قصيرة وواضحة.
 
-بدل x^3 اكتب "x تكعيب".
+لا تستخدم مصطلحات معقدة بدون شرحها.
 
-بدل × اكتب كلمة "في".
+لو الطالب قال "حل":
+أعطِ الحل المطلوب والنتيجة بشكل مباشر بدون شرح طويل.
 
-مثال:
-F = m في a
+لو الطالب قال "اشرح":
+اشرح الفكرة ثم القانون ثم التطبيق بالتدريج.
 
-مثال:
-KE = نصف في m في v تربيع
+لو السؤال عادي:
+جاوب بشكل طبيعي ومختصر وواضح.
 
-مثال:
-v = d على t
+لا تضف معلومات لا يحتاجها السؤال.
 
-مثال:
-V = I في R
+لا تخترع بيانات غير موجودة في السؤال.
 
-لو المعادلة ممكن تتقال بالكلام بشكل أوضح، استخدم الكلام.
-
-خلي الطالب يقدر يقرأ الإجابة ويفهمها من أول مرة.
+لو توجد بيانات ناقصة تمنع الحل، اطلب البيانات الناقصة فقط.
 `;
 
 /* =========================================================
-   AI INSTRUCTIONS
+   EXPERT INSTRUCTIONS
 ========================================================= */
 
-function buildExpertInstructions({
-    complex,
-    hasImage,
-    intent
-}) {
-    let instructions = `
-أنت Physics AI.
+function buildExpertInstructions(
+    question,
+    history = []
+) {
+    const preflight =
+        buildPreflight(
+            question
+        );
 
-أنت مدرس فيزياء شاطر جدًا لكن أسلوبك بسيط وواضح.
+    const intent =
+        detectQuestionIntent(
+            question
+        );
 
-مهمتك إنك تفهم سؤال الطالب وتجاوب عليه بدقة.
+    const domainsText =
+        preflight.domains
+            .map(
+                (item) =>
+                    `${item.domain}: ${item.matches.join(", ")}`
+            )
+            .join("\n");
 
-لا تخترع أي معلومة.
+    const quantitiesText =
+        preflight.quantities
+            .map(
+                (item) =>
+                    `${item.value} ${item.unit || ""}`.trim()
+            )
+            .join(", ");
 
-لا تفترض رقمًا غير موجود.
-
-راجع الحسابات والوحدات.
-
-لو السؤال ناقص، قل للطالب إن البيانات ناقصة.
-
-لو السؤال واضح، جاوب مباشرة.
+    return `
+أنت Physics AI، مدرس فيزياء مصري متخصص في مساعدة طلاب الثانوية العامة.
 
 ${SIMPLE_STYLE}
 
+قواعد الدقة:
+
+1. اقرأ السؤال بالكامل قبل الإجابة.
+
+2. حدد المطلوب فعلاً.
+
+3. استخرج المعطيات.
+
+4. تأكد من الوحدات.
+
+5. لا تخلط بين الكميات الفيزيائية.
+
+6. استخدم القانون الفيزيائي الصحيح فقط.
+
+7. لا تفترض قيمة غير موجودة.
+
+8. لو توجد أكثر من خطوة، نفذها داخلياً بالترتيب.
+
+9. راجع الحساب قبل إرسال النتيجة.
+
+10. لو هناك تعارض بين بيانات السؤال والقانون، وضح المشكلة.
+
+11. لا تستخدم قانوناً من مجال مختلف.
+
+12. لا تقدم نتيجة رقمية إذا كانت البيانات لا تسمح بها.
+
+13. حافظ على الوحدات.
+
+14. إذا كان السؤال اختيار من متعدد، حدد الاختيار الصحيح مع سبب مختصر عند الحاجة.
+
+15. إذا كان السؤال يحتوي على صورة، اقرأ الصورة بدقة وحاول استخراج الرسم أو البيانات أو النص منها.
+
+16. لا تقل إنك لا تستطيع رؤية الصورة إذا كانت البيانات متاحة في الرسالة.
+
+17. إذا كانت الصورة غير واضحة فعلاً، اطلب صورة أوضح.
+
+18. لا تخترع أي بيانات من صورة غير واضحة.
+
+19. في المسائل الحسابية، احسب النتيجة بدقة.
+
+20. راجع الإشارة الموجبة والسالبة.
+
+21. راجع الأسس.
+
+22. راجع تحويل الوحدات.
+
+23. لا تكتب كلاماً مثل "ربما" إذا كانت الإجابة مؤكدة.
+
+24. إذا كان هناك أكثر من تفسير ممكن للسؤال، اختر التفسير الأكثر منطقية واذكر الافتراض باختصار.
+
+نية السؤال:
+${intent}
+
+درجة التعقيد:
+${preflight.score}
+
+المجالات المكتشفة:
+${domainsText || "غير محدد"}
+
+الكميات المستخرجة:
+${quantitiesText || "لا توجد كميات رقمية واضحة"}
+
+الثوابت الفيزيائية المتاحة:
+${getPhysicsConstantsText()}
+
+سؤال الطالب:
+${question}
+
+مهم جداً:
+لا تعرض التحليل الداخلي أو خطوات التفكير الخاصة بك.
+اعرض فقط الإجابة النهائية المناسبة للطالب.
 `;
-
-    if (
-        intent === "solution"
-    ) {
-        instructions += `
-الطالب طلب حل.
-
-مهم جدًا:
-
-اكتب الإجابة النهائية مباشرة فقط.
-
-لا تكتب خطوات.
-
-لا تكتب شرح.
-
-لا تكتب مقدمة.
-
-لا تكتب طريقة الحل.
-
-لا تكتب "أولًا" أو "ثانيًا".
-
-لا تكرر السؤال.
-
-خلي الرد قصير وواضح.
-
-مثال:
-
-الإجابة: 20 متر/ثانية
-
-ولو فيه أكثر من قيمة مطلوبة، اكتب كل نتيجة بوضوح.
-
-لا تعرض خطوات الحساب إلا لو الطالب طلب شرح صراحة.
-`;
-    } else if (
-        intent === "explanation"
-    ) {
-        instructions += `
-الطالب طلب شرح.
-
-هنا فقط اشرح بالتفصيل.
-
-ابدأ من الفكرة الأساسية.
-
-وضح معنى القانون.
-
-وضح لماذا نستخدم القانون.
-
-وضح الرموز بالكلام.
-
-استخدم مثال بسيط عند الحاجة.
-
-لو فيه عملية حسابية، اكتبها بطريقة سهلة.
-
-خلي الشرح تدريجي وواضح.
-
-ما تستخدمش تعقيد رياضي بدون داعي.
-`;
-    } else {
-        instructions += `
-الطالب لم يطلب حلًا بشكل مباشر ولم يطلب شرحًا بشكل مباشر.
-
-افهم المطلوب.
-
-لو محتاج نتيجة مباشرة، اعط النتيجة.
-
-لو السؤال محتاج توضيح، وضحه.
-
-لو سؤال نظري، جاوب بشكل بسيط.
-
-لو مسألة حسابية، حاول تكون مباشر وواضح.
-`;
-    }
-
-    if (complex) {
-        instructions += `
-السؤال ممكن يكون مركب.
-
-اهتم بالدقة جدًا.
-
-راجع كل المعطيات.
-
-راجع الوحدات.
-
-راجع النتيجة.
-
-لكن لا تعرض التعقيد للطالب إلا لو كان مطلوبًا.
-`;
-    }
-
-    if (hasImage) {
-        instructions += `
-يوجد صورة مع السؤال.
-
-اقرأ الصورة بعناية.
-
-اقرأ الأرقام والبيانات.
-
-لا تخترع أي رقم مش واضح.
-
-لو جزء من الصورة غير واضح، قل إن الجزء غير واضح.
-`;
-    }
-
-    return (
-        instructions +
-        `
-
-ثوابت فيزيائية مرجعية عند الحاجة:
-
-g = ${PHYSICS_CONSTANTS.g}
-
-c = ${PHYSICS_CONSTANTS.c}
-
-h = ${PHYSICS_CONSTANTS.h}
-
-e = ${PHYSICS_CONSTANTS.e}
-
-G = ${PHYSICS_CONSTANTS.G}
-`
-    );
 }
 
 /* =========================================================
-   CLEAN AI ANSWER
+   CLEAN PHYSICS ANSWER
 ========================================================= */
 
-function cleanPhysicsAnswer(text) {
+function cleanPhysicsAnswer(
+    answer
+) {
     let output =
-        String(
-            text || ""
-        ).trim();
+        String(answer || "");
 
-    if (!output) {
-        return "";
-    }
-
-    /* Remove code blocks */
     output =
         output.replace(
-            /```[a-zA-Z0-9_-]*/g,
+            /```[\s\S]*?```/g,
+            (block) =>
+                block
+                    .replace(/```/g, "")
+                    .trim()
+        );
+
+    output =
+        output.replace(
+            /\$\$[\s\S]*?\$\$/g,
             ""
         );
 
     output =
         output.replace(
-            /```/g,
-            ""
-        );
-
-    /* Remove heading marks */
-    output =
-        output.replace(
-            /^\s*#{1,6}\s*/gm,
-            ""
-        );
-
-    /* Remove bold */
-    output =
-        output.replace(
-            /\*\*(.*?)\*\*/gs,
+            /\$([^$]+)\$/g,
             "$1"
         );
 
     output =
         output.replace(
-            /__(.*?)__/gs,
-            "$1"
+            /\\frac\s*\{([^}]*)\}\s*\{([^}]*)\}/g,
+            "$1 على $2"
         );
 
-    /* Remove LaTeX wrappers */
-    output =
-        output.replace(
-            /\\\[/g,
-            ""
-        );
-
-    output =
-        output.replace(
-            /\\\]/g,
-            ""
-        );
-
-    output =
-        output.replace(
-            /\\\(/g,
-            ""
-        );
-
-    output =
-        output.replace(
-            /\\\)/g,
-            ""
-        );
-
-    /* LaTeX commands */
     output =
         output.replace(
             /\\times/g,
@@ -1813,123 +1930,70 @@ function cleanPhysicsAnswer(text) {
 
     output =
         output.replace(
-            /\\div/g,
+            /\*/g,
+            " في "
+        );
+
+    output =
+        output.replace(
+            /×/g,
+            " في "
+        );
+
+    output =
+        output.replace(
+            /\^2/g,
+            " تربيع"
+        );
+
+    output =
+        output.replace(
+            /\^3/g,
+            " تكعيب"
+        );
+
+    output =
+        output.replace(
+            /\^([0-9]+)/g,
+            " أس $1"
+        );
+
+    output =
+        output.replace(
+            /\/+/g,
             " على "
         );
 
     output =
         output.replace(
-            /\\sqrt\{([^{}]+)\}/g,
+            /\\sqrt\s*\{([^}]*)\}/g,
             "الجذر التربيعي لـ $1"
         );
 
     output =
         output.replace(
-            /\\pi/g,
-            "pi"
-        );
-
-    output =
-        output.replace(
-            /\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g,
-            "$1 على $2"
-        );
-
-    /* Regular symbols */
-    const replacements = {
-        "×": " في ",
-        "÷": " على ",
-        "*": " في ",
-        "−": "-",
-        "–": "-",
-        "—": "-",
-
-        "²": " تربيع",
-        "³": " تكعيب",
-        "⁴": " أس 4",
-        "⁵": " أس 5",
-
-        "√": "الجذر التربيعي لـ ",
-
-        "π": "pi",
-
-        "θ": "theta",
-        "φ": "phi",
-        "ω": "omega",
-        "λ": "lambda",
-        "μ": "mu",
-
-        "Δ": "التغير في ",
-        "δ": "دلتا"
-    };
-
-    for (
-        const [from, to]
-        of Object.entries(
-            replacements
-        )
-    ) {
-        output =
-            output.replaceAll(
-                from,
-                to
-            );
-    }
-
-    /* Convert common power style */
-    output =
-        output.replace(
-            /([A-Za-z\u0600-\u06FF0-9]+)\^2/g,
-            "$1 تربيع"
-        );
-
-    output =
-        output.replace(
-            /([A-Za-z\u0600-\u06FF0-9]+)\^3/g,
-            "$1 تكعيب"
-        );
-
-    output =
-        output.replace(
-            /([A-Za-z\u0600-\u06FF0-9]+)\^([4-9])/g,
-            "$1 أس $2"
-        );
-
-    /* Remove dollar signs */
-    output =
-        output.replace(
-            /\$/g,
-            ""
-        );
-
-    /* Remove emojis */
-    output =
-        output.replace(
-            /[\u{1F300}-\u{1FAFF}]/gu,
+            /\\left/g,
             ""
         );
 
     output =
         output.replace(
-            /[\u{2600}-\u{27BF}]/gu,
+            /\\right/g,
             ""
         );
 
-    /* Clean repeated spaces */
     output =
         output.replace(
-            /[ \t]{2,}/g,
-            " "
-        );
-
-    /* Clean spaces before punctuation */
-    output =
-        output.replace(
-            /\s+([،,.؟!])/g,
+            /\\text\s*\{([^}]*)\}/g,
             "$1"
         );
 
-    /* Clean too many lines */
+    output =
+        output.replace(
+            /\s{2,}/g,
+            " "
+        );
+
     output =
         output.replace(
             /\n{3,}/g,
@@ -1937,6 +2001,157 @@ function cleanPhysicsAnswer(text) {
         );
 
     return output.trim();
+}
+
+/* =========================================================
+   GEMINI RETRY SYSTEM
+========================================================= */
+
+function getGeminiStatus(
+    error
+) {
+    return Number(
+        error?.status ||
+            error?.statusCode ||
+            error?.response?.status ||
+            0
+    );
+}
+
+function getRetryAfterMs(
+    error
+) {
+    const retryAfter =
+        error?.response?.headers?.get?.(
+            "retry-after"
+        ) ??
+        error?.headers?.get?.(
+            "retry-after"
+        ) ??
+        error?.response?.headers?.[
+            "retry-after"
+        ] ??
+        error?.headers?.[
+            "retry-after"
+        ];
+
+    const seconds =
+        Number(
+            retryAfter
+        );
+
+    if (
+        Number.isFinite(
+            seconds
+        ) &&
+        seconds > 0
+    ) {
+        return Math.min(
+            seconds * 1000,
+            15000
+        );
+    }
+
+    return 0;
+}
+
+function isRetryableGeminiError(
+    error
+) {
+    const status =
+        getGeminiStatus(
+            error
+        );
+
+    return (
+        status === 429 ||
+        status === 503 ||
+        status === 502 ||
+        status === 504 ||
+        status === 408
+    );
+}
+
+async function generateGeminiWithRetry(
+    options,
+    label = "Gemini"
+) {
+    const maxRetries = 3;
+
+    const baseDelay = 1000;
+
+    let lastError;
+
+    for (
+        let attempt = 0;
+        attempt <= maxRetries;
+        attempt++
+    ) {
+        try {
+            return await ai.models.generateContent(
+                options
+            );
+        } catch (error) {
+            lastError = error;
+
+            const status =
+                getGeminiStatus(
+                    error
+                );
+
+            if (
+                !isRetryableGeminiError(
+                    error
+                ) ||
+                attempt ===
+                    maxRetries
+            ) {
+                throw error;
+            }
+
+            const retryAfter =
+                getRetryAfterMs(
+                    error
+                );
+
+            const exponential =
+                Math.min(
+                    baseDelay *
+                        2 **
+                            attempt,
+                    8000
+                );
+
+            const jitter =
+                Math.floor(
+                    Math.random() *
+                        500
+                );
+
+            const delay =
+                Math.max(
+                    retryAfter,
+                    exponential +
+                        jitter
+                );
+
+            console.warn(
+                `${label}: retry ${
+                    attempt + 1
+                }/${maxRetries} after ${delay}ms (status ${status})`
+            );
+
+            await new Promise(
+                (resolve) =>
+                    setTimeout(
+                        resolve,
+                        delay
+                    )
+            );
+        }
+    }
+
+    throw lastError;
 }
 
 /* =========================================================
@@ -1948,17 +2163,21 @@ async function callGemini(
     systemInstruction,
     temperature = 0.2
 ) {
-    return ai.models.generateContent({
-        model: GEMINI_MODEL,
+    return generateGeminiWithRetry(
+        {
+            model:
+                GEMINI_MODEL,
 
-        contents,
+            contents,
 
-        config: {
-            temperature,
+            config: {
+                temperature,
 
-            systemInstruction
-        }
-    });
+                systemInstruction
+            }
+        },
+        "Gemini"
+    );
 }
 
 /* =========================================================
@@ -1967,322 +2186,176 @@ async function callGemini(
 
 async function verifyComplexAnswer({
     question,
-    draft,
-    contextText,
-    preflight,
-    image,
-    intent
+    answer,
+    preflight
 }) {
-    const verifierInstructions = `
+    try {
+        if (
+            !answer ||
+            preflight.score < 8
+        ) {
+            return answer;
+        }
+
+        const verificationPrompt = `
 أنت مراجع فيزياء.
 
-راجع الإجابة للتأكد من صحتها.
+راجع الإجابة التالية مقابل سؤال الطالب.
 
-مهم جدًا:
+لا تعيد كتابة الإجابة بالكامل إلا إذا كان هناك خطأ.
 
-لو الطالب طلب حل فقط، لا تضف خطوات.
+افحص:
 
-لو الطالب طلب شرح، حافظ على الشرح.
+- القانون
+- الحساب
+- الوحدات
+- الإشارات
+- الأسس
+- النتيجة
+- هل تم فهم المطلوب بشكل صحيح
 
-لا تضف رموز غريبة.
+إذا كانت الإجابة صحيحة:
+أعدها كما هي تقريباً.
 
-لا تستخدم LaTeX.
+إذا كان بها خطأ:
+صحح الخطأ.
 
-لا تستخدم:
-*
-×
-÷
-^2
-^3
+ممنوع استخدام LaTeX.
+ممنوع الرموز الرياضية المعقدة.
+استخدم العربية المصرية البسيطة.
 
-استخدم كلمات بسيطة.
-
-تأكد من:
-
-صحة النتيجة.
-
-صحة الوحدات.
-
-صحة القانون.
-
-عدم اختراع بيانات.
-
-وضوح الإجابة.
-
-لو الإجابة صحيحة اتركها كما هي مع تحسين بسيط للوضوح عند الحاجة.
-
-لو فيها خطأ صححه.
-
-لا تكتب تقرير مراجعة.
-
-لا تتكلم عن عملية المراجعة نفسها.
-`;
-
-    const verifyText = `
-سؤال الطالب:
+السؤال:
 ${question}
 
-نوع الطلب:
-${intent}
+الإجابة:
+${answer}
 
-${contextText}
+المجالات:
+${JSON.stringify(
+    preflight.domains
+)}
 
-${preflight.promptBlock}
-
-الإجابة الحالية:
-${draft}
+الكميات:
+${JSON.stringify(
+    preflight.quantities
+)}
 `;
 
-    const parts = [
-        {
-            text: verifyText
-        }
-    ];
+        const response =
+            await callGemini(
+                [
+                    {
+                        role: "user",
 
-    if (
-        image &&
-        typeof image === "string" &&
-        image.startsWith(
-            "data:image/"
-        )
-    ) {
-        const match =
-            image.match(
-                /^data:([^;]+);base64,(.+)$/
+                        parts: [
+                            {
+                                text:
+                                    verificationPrompt
+                            }
+                        ]
+                    }
+                ],
+                SIMPLE_STYLE,
+                0.1
             );
 
-        if (match) {
-            parts.push({
-                inlineData: {
-                    mimeType:
-                        match[1],
-                    data:
-                        match[2]
-                }
-            });
-        }
-    }
+        const verified =
+            cleanPhysicsAnswer(
+                String(
+                    response.text ||
+                        answer
+                )
+            );
 
-    const response =
-        await callGemini(
-            [
-                {
-                    role: "user",
-
-                    parts
-                }
-            ],
-            verifierInstructions,
-            0.1
+        return (
+            verified ||
+            answer
+        );
+    } catch (error) {
+        console.error(
+            "VERIFY ERROR:",
+            error
         );
 
-    return cleanPhysicsAnswer(
-        String(
-            response.text ||
-                draft
-        ).trim()
-    );
+        return answer;
+    }
 }
 
 /* =========================================================
-   PHYSICS CHAT
+   CHAT MEMORY
 ========================================================= */
 
-app.post(
-    "/api/chat",
-    requireLogin,
-    async function (req, res) {
-        try {
-            const message =
-                String(
-                    req.body.message ||
-                        ""
-                ).trim();
+function getConversationHistory(
+    conversationId,
+    limit = 20
+) {
+    const safeLimit =
+        Math.max(
+            1,
+            Math.min(
+                Number(limit) ||
+                    20,
+                40
+            )
+        );
 
-            if (!message) {
-                return res.status(400).json({
-                    error:
-                        "اكتب سؤالك الأول."
-                });
-            }
+    const messages =
+        db.prepare(`
+            SELECT
+                role,
+                content,
+                image,
+                created_at
+            FROM messages
+            WHERE conversation_id = ?
+            ORDER BY id DESC
+            LIMIT ${safeLimit}
+        `).all(
+            conversationId
+        );
 
-            const history =
-                Array.isArray(
-                    req.body.history
-                )
-                    ? req.body.history.slice(
-                          -20
-                      )
-                    : [];
+    return messages.reverse();
+}
 
-            const grade =
-                String(
-                    req.body.grade ||
-                        ""
-                ).trim();
+/* =========================================================
+   BUILD GEMINI HISTORY
+========================================================= */
 
-            const subject =
-                String(
-                    req.body.subject ||
-                        "الفيزياء"
-                ).trim();
-
-            const unit =
-                String(
-                    req.body.unit ||
-                        ""
-                ).trim();
-
-            const lesson =
-                String(
-                    req.body.lesson ||
-                        ""
-                ).trim();
-
-            const mode =
-                String(
-                    req.body.mode ||
-                        ""
-                ).trim();
-
-            const image =
-                req.body.image ||
-                null;
+function buildGeminiHistory(
+    messages
+) {
+    return messages.map(
+        (message) => {
+            const parts = [];
 
             if (
-                typeof image === "string" &&
-                image.length >
-                    8_000_000
+                message.content
             ) {
-                return res.status(400).json({
-                    error:
-                        "الصورة كبيرة جدًا."
+                parts.push({
+                    text:
+                        message.content
                 });
             }
-
-            const contextText = `
-بيانات الطالب:
-
-الصف:
-${
-    grade ||
-    "غير محدد"
-}
-
-المادة:
-${subject}
-
-الوحدة:
-${
-    unit ||
-    "غير محدد"
-}
-
-الدرس:
-${
-    lesson ||
-    "غير محدد"
-}
-
-نوع الجلسة:
-${
-    mode ||
-    "دردشة عامة"
-}
-`;
-
-            const preflight =
-                buildPreflight(
-                    message,
-                    image
-                );
-
-            const complex =
-                preflight.complexity >=
-                5;
-
-            const intent =
-                detectQuestionIntent(
-                    message
-                );
-
-            const systemInstructions =
-                buildExpertInstructions({
-                    complex,
-                    hasImage:
-                        Boolean(image),
-                    intent
-                });
-
-            const contents = [];
-
-            for (
-                const item
-                of history
-            ) {
-                if (
-                    !item ||
-                    !item.role ||
-                    !item.content
-                ) {
-                    continue;
-                }
-
-                const role =
-                    item.role ===
-                    "assistant"
-                        ? "model"
-                        : "user";
-
-                contents.push({
-                    role,
-
-                    parts: [
-                        {
-                            text:
-                                String(
-                                    item.content
-                                )
-                        }
-                    ]
-                });
-            }
-
-            const currentText = `
-${systemInstructions}
-
-${contextText}
-
-${preflight.promptBlock}
-
-السؤال الحالي:
-${message}
-`;
-
-            const currentParts = [
-                {
-                    text: currentText
-                }
-            ];
 
             if (
-                image &&
-                typeof image ===
-                    "string" &&
-                image.startsWith(
-                    "data:image/"
-                )
+                message.image
             ) {
+                const image =
+                    String(
+                        message.image
+                    );
+
                 const match =
                     image.match(
                         /^data:([^;]+);base64,(.+)$/
                     );
 
                 if (match) {
-                    currentParts.push({
+                    parts.push({
                         inlineData: {
                             mimeType:
                                 match[1],
+
                             data:
                                 match[2]
                         }
@@ -2290,45 +2363,182 @@ ${message}
                 }
             }
 
-            contents.push({
-                role: "user",
+            return {
+                role:
+                    message.role ===
+                    "assistant"
+                        ? "model"
+                        : "user",
 
-                parts: currentParts
+                parts
+            };
+        }
+    );
+}
+
+/* =========================================================
+   CHAT API
+========================================================= */
+
+app.post(
+    "/api/chat",
+    requireAuth,
+    async (req, res) => {
+        try {
+            const question =
+                cleanString(
+                    req.body?.message,
+                    20000
+                );
+
+            let conversationId =
+                Number(
+                    req.body
+                        ?.conversationId
+                );
+
+            const image =
+                cleanString(
+                    req.body?.image,
+                    20000000
+                );
+
+            if (
+                !question &&
+                !image
+            ) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "اكتب سؤالك أو أرسل صورة."
+                    });
+            }
+
+            if (
+                !Number.isInteger(
+                    conversationId
+                ) ||
+                conversationId <= 0
+            ) {
+                const createdAt =
+                    nowISO();
+
+                const title =
+                    question
+                        ? question.slice(
+                              0,
+                              80
+                          )
+                        : "دردشة جديدة";
+
+                const result =
+                    db.prepare(`
+                        INSERT INTO conversations (
+                            user_id,
+                            title,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (?, ?, ?, ?)
+                    `).run(
+                        req.session.userId,
+                        title,
+                        createdAt,
+                        createdAt
+                    );
+
+                conversationId =
+                    Number(
+                        result.lastInsertRowid
+                    );
+            }
+
+            const conversation =
+                db.prepare(`
+                    SELECT
+                        id,
+                        title
+                    FROM conversations
+                    WHERE id = ?
+                    AND user_id = ?
+                `).get(
+                    conversationId,
+                    req.session.userId
+                );
+
+            if (!conversation) {
+                return res
+                    .status(404)
+                    .json({
+                        error:
+                            "المحادثة غير موجودة."
+                    });
+            }
+
+            const previousMessages =
+                getConversationHistory(
+                    conversationId,
+                    20
+                );
+
+            const userMessageText =
+                question ||
+                "أريد المساعدة في فهم الصورة.";
+
+            const preflight =
+                buildPreflight(
+                    userMessageText
+                );
+
+            const systemInstruction =
+                buildExpertInstructions(
+                    userMessageText,
+                    previousMessages
+                );
+
+            const history =
+                buildGeminiHistory(
+                    previousMessages
+                );
+
+            const userParts = [];
+
+            userParts.push({
+                text:
+                    userMessageText
             });
 
-            console.log(
-                "Physics Engine:",
-                JSON.stringify({
-                    complexity:
-                        preflight.complexity,
+            if (image) {
+                const match =
+                    image.match(
+                        /^data:([^;]+);base64,(.+)$/
+                    );
 
-                    complex,
+                if (match) {
+                    userParts.push({
+                        inlineData: {
+                            mimeType:
+                                match[1],
 
-                    intent,
+                            data:
+                                match[2]
+                        }
+                    });
+                }
+            }
 
-                    domains:
-                        preflight.domains.map(
-                            x =>
-                                x.name
-                        ),
+            history.push({
+                role: "user",
 
-                    quantities:
-                        preflight
-                            .quantities
-                            .length,
-
-                    image:
-                        Boolean(image)
-                })
-            );
+                parts: userParts
+            });
 
             const response =
                 await callGemini(
-                    contents,
-                    systemInstructions,
-                    complex
-                        ? 0.15
-                        : 0.2
+                    history,
+                    systemInstruction,
+                    0.2
                 );
 
             let answer =
@@ -2336,156 +2546,163 @@ ${message}
                     String(
                         response.text ||
                             ""
-                    ).trim()
+                    )
                 );
 
             if (!answer) {
-                return res.status(502).json({
-                    error:
-                        "Gemini لم يرجع إجابة."
-                });
+                answer =
+                    "مقدرتش أطلع إجابة من السؤال ده. حاول تكتبه بطريقة أوضح.";
             }
-
-            /*
-             * المراجعة الثانية للمسائل المركبة
-             *
-             * لا نستخدمها في طلب الحل البسيط
-             * حتى يفضل الرد مباشرًا.
-             */
 
             if (
-                complex &&
-                intent !== "solution" &&
-                process.env.PHYSICS_VERIFY !==
-                    "false"
+                preflight.score >=
+                8
             ) {
-                try {
-                    const verified =
-                        await verifyComplexAnswer({
+                answer =
+                    await verifyComplexAnswer(
+                        {
                             question:
-                                message,
+                                userMessageText,
 
-                            draft:
-                                answer,
+                            answer,
 
-                            contextText,
-
-                            preflight,
-
-                            image,
-
-                            intent
-                        });
-
-                    if (verified) {
-                        answer =
-                            verified;
-                    }
-                } catch (
-                    verifyError
-                ) {
-                    console.error(
-                        "VERIFY ERROR:",
-                        verifyError
+                            preflight
+                        }
                     );
-                }
             }
 
-            res.json({
+            const createdAt =
+                nowISO();
+
+            db.prepare(`
+                INSERT INTO messages (
+                    conversation_id,
+                    role,
+                    content,
+                    image,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+            `).run(
+                conversationId,
+                "user",
+                userMessageText,
+                image || null,
+                createdAt
+            );
+
+            db.prepare(`
+                INSERT INTO messages (
+                    conversation_id,
+                    role,
+                    content,
+                    image,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+            `).run(
+                conversationId,
+                "assistant",
+                answer,
+                null,
+                createdAt
+            );
+
+            db.prepare(`
+                UPDATE conversations
+                SET updated_at = ?
+                WHERE id = ?
+                AND user_id = ?
+            `).run(
+                createdAt,
+                conversationId,
+                req.session.userId
+            );
+
+            return res.json({
                 success: true,
+
+                conversationId,
 
                 answer,
 
-                physicsEngine: {
-                    version:
-                        "2.0",
-
-                    complexity:
-                        preflight
-                            .complexity,
-
-                    intent,
-
-                    domains:
-                        preflight
-                            .domains
-                            .map(
-                                x =>
-                                    x.name
-                            ),
-
-                    verified:
-                        complex &&
-                        intent !==
-                            "solution" &&
-                        process.env
-                            .PHYSICS_VERIFY !==
-                            "false"
-                }
+                message: answer
             });
         } catch (error) {
             console.error(
-                "PHYSICS AI ERROR:",
+                "CHAT ERROR:",
                 error
             );
 
             const status =
-                Number(
-                    error?.status ||
-                        error?.statusCode ||
-                        500
+                getGeminiStatus(
+                    error
                 );
 
-            if (status === 429) {
-                return res.status(429).json({
-                    error:
-                        "تم الوصول إلى حد الاستخدام الحالي. حاول بعد قليل."
-                });
+            if (
+                status === 429
+            ) {
+                return res
+                    .status(429)
+                    .json({
+                        error:
+                            "تم الوصول إلى حد الاستخدام الحالي بعد عدة محاولات تلقائية. حاول بعد قليل."
+                    });
             }
 
             if (
                 status === 401 ||
                 status === 403
             ) {
-                return res.status(500).json({
-                    error:
-                        "مفتاح Gemini غير صحيح أو غير مصرح باستخدامه."
-                });
+                return res
+                    .status(500)
+                    .json({
+                        error:
+                            "مفتاح Gemini غير صحيح أو غير مصرح باستخدامه."
+                    });
             }
 
-            res.status(500).json({
-                error:
-                    "حصل خطأ أثناء تشغيل Physics AI."
-            });
+            if (
+                status === 502 ||
+                status === 503 ||
+                status === 504 ||
+                status === 408
+            ) {
+                return res
+                    .status(503)
+                    .json({
+                        error:
+                            "Gemini مشغول حاليًا. حاول بعد قليل."
+                    });
+            }
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تشغيل Physics AI."
+                });
         }
     }
 );
 
 /* =========================================================
-   AUDIO TRANSCRIPTION
+   TRANSCRIPTION
 ========================================================= */
 
 app.post(
     "/api/transcribe",
-    requireLogin,
-    audioUpload.single("audio"),
-    async function (req, res) {
+    requireAuth,
+    upload.single("audio"),
+    async (req, res) => {
         try {
             if (!req.file) {
-                return res.status(400).json({
-                    error:
-                        "لم يتم إرسال تسجيل صوتي."
-                });
-            }
-
-            if (
-                req.file.size >
-                19 * 1024 * 1024
-            ) {
-                return res.status(400).json({
-                    error:
-                        "التسجيل كبير جدًا. استخدم تسجيلًا أقل من 19MB."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "لم يتم إرسال تسجيل صوتي."
+                    });
             }
 
             const audioBase64 =
@@ -2502,7 +2719,7 @@ app.post(
                     .trim();
 
             const response =
-                await ai.models.generateContent(
+                await generateGeminiWithRetry(
                     {
                         model:
                             GEMINI_MODEL,
@@ -2531,12 +2748,14 @@ app.post(
                             {
                                 inlineData: {
                                     mimeType,
+
                                     data:
                                         audioBase64
                                 }
                             }
                         ]
-                    }
+                    },
+                    "Transcription"
                 );
 
             const text =
@@ -2544,23 +2763,68 @@ app.post(
                     String(
                         response.text ||
                             ""
-                    ).trim()
+                    )
                 );
 
-            res.json({
+            return res.json({
                 success: true,
+
                 text
             });
         } catch (error) {
             console.error(
-                "TRANSCRIPTION ERROR:",
+                "TRANSCRIBE ERROR:",
                 error
             );
 
-            res.status(500).json({
-                error:
-                    "تعذر تحويل التسجيل الصوتي إلى نص."
-            });
+            const status =
+                getGeminiStatus(
+                    error
+                );
+
+            if (
+                status === 429
+            ) {
+                return res
+                    .status(429)
+                    .json({
+                        error:
+                            "تم الوصول إلى حد استخدام Gemini. حاول بعد قليل."
+                    });
+            }
+
+            if (
+                status === 401 ||
+                status === 403
+            ) {
+                return res
+                    .status(500)
+                    .json({
+                        error:
+                            "مفتاح Gemini غير صحيح أو غير مصرح باستخدامه."
+                    });
+            }
+
+            if (
+                status === 502 ||
+                status === 503 ||
+                status === 504 ||
+                status === 408
+            ) {
+                return res
+                    .status(503)
+                    .json({
+                        error:
+                            "خدمة الصوت مشغولة حاليًا. حاول بعد قليل."
+                    });
+            }
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "حصل خطأ أثناء تحويل التسجيل إلى نص."
+                });
         }
     }
 );
@@ -2571,22 +2835,84 @@ app.post(
 
 app.get(
     "/api/health",
-    function (req, res) {
-        res.json({
-            success: true,
-
-            message:
-                "Physics AI is running",
+    (req, res) => {
+        return res.json({
+            status: "ok",
 
             model:
                 GEMINI_MODEL,
 
-            loggedIn:
-                Boolean(
-                    req.session &&
-                    req.session.userId
-                )
+            database:
+                "ready",
+
+            physicsAI:
+                "ready",
+
+            audio:
+                "ready",
+
+            image:
+                "ready",
+
+            timestamp:
+                nowISO()
         });
+    }
+);
+
+/* =========================================================
+   ROOT ROUTES
+========================================================= */
+
+app.get(
+    "/",
+    (req, res) => {
+        return res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "index.html"
+            )
+        );
+    }
+);
+
+app.get(
+    "/login",
+    (req, res) => {
+        return res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "login.html"
+            )
+        );
+    }
+);
+
+app.get(
+    "/study",
+    (req, res) => {
+        return res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "study.html"
+            )
+        );
+    }
+);
+
+app.get(
+    "/chat",
+    (req, res) => {
+        return res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "chat.html"
+            )
+        );
     }
 );
 
@@ -2595,65 +2921,35 @@ app.get(
 ========================================================= */
 
 app.use(
-    function (
+    (
         error,
         req,
         res,
         next
-    ) {
+    ) => {
         console.error(
-            "SERVER ERROR:",
+            "GLOBAL ERROR:",
             error
         );
 
         if (
-            error &&
-            error.code ===
-                "LIMIT_FILE_SIZE"
+            error instanceof
+            multer.MulterError
         ) {
-            return res.status(400).json({
-                error:
-                    "حجم الملف كبير جدًا."
-            });
+            return res
+                .status(400)
+                .json({
+                    error:
+                        "حجم الملف كبير أو نوع الملف غير مدعوم."
+                });
         }
 
-        if (
-            error &&
-            error.message ===
-                "يسمح برفع الصور فقط."
-        ) {
-            return res.status(400).json({
+        return res
+            .status(500)
+            .json({
                 error:
-                    "يسمح برفع الصور فقط."
+                    "حصل خطأ غير متوقع في السيرفر."
             });
-        }
-
-        if (
-            error &&
-            error.message ===
-                "نوع الملف الصوتي غير مدعوم."
-        ) {
-            return res.status(400).json({
-                error:
-                    "نوع الملف الصوتي غير مدعوم."
-            });
-        }
-
-        if (
-            error &&
-            error.name ===
-                "MulterError"
-        ) {
-            return res.status(400).json({
-                error:
-                    "حصل خطأ في رفع الملف."
-            });
-        }
-
-        res.status(500).json({
-            error:
-                "حصل خطأ في السيرفر."
-        });
     }
 );
 
@@ -2661,36 +2957,111 @@ app.use(
    START SERVER
 ========================================================= */
 
-app.listen(
-    PORT,
-    function () {
-        console.log(
-            `Physics AI running on port ${PORT}`
-        );
+const server =
+    app.listen(
+        PORT,
+        () => {
+            console.log(
+                ""
+            );
 
-        console.log(
-            "Model:",
-            GEMINI_MODEL
-        );
+            console.log(
+                "========================================"
+            );
 
-        console.log(
-            "Authentication: READY"
-        );
+            console.log(
+                "        PHYSICS AI SERVER"
+            );
 
-        console.log(
-            "Database: READY"
-        );
+            console.log(
+                "========================================"
+            );
 
-        console.log(
-            "Physics AI: READY"
-        );
+            console.log(
+                "Port:",
+                PORT
+            );
 
-        console.log(
-            "Audio: READY"
-        );
+            console.log(
+                "Model:",
+                GEMINI_MODEL
+            );
 
-        console.log(
-            "Image: READY"
-        );
-    }
+            console.log(
+                "Authentication: READY"
+            );
+
+            console.log(
+                "Database: READY"
+            );
+
+            console.log(
+                "Physics AI: READY"
+            );
+
+            console.log(
+                "Audio: READY"
+            );
+
+            console.log(
+                "Image: READY"
+            );
+
+            console.log(
+                "Gemini Retry System: READY"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                ""
+            );
+        }
+    );
+
+/* =========================================================
+   GRACEFUL SHUTDOWN
+========================================================= */
+
+function shutdown(
+    signal
+) {
+    console.log(
+        `${signal} received. Shutting down...`
+    );
+
+    server.close(
+        () => {
+            try {
+                db.close();
+            } catch (
+                error
+            ) {
+                console.error(
+                    "DB CLOSE ERROR:",
+                    error
+                );
+            }
+
+            process.exit(0);
+        }
+    );
+}
+
+process.on(
+    "SIGTERM",
+    () =>
+        shutdown(
+            "SIGTERM"
+        )
+);
+
+process.on(
+    "SIGINT",
+    () =>
+        shutdown(
+            "SIGINT"
+        )
 );
